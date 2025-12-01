@@ -1,5 +1,8 @@
+const currentScript = document.currentScript;
+const catalogUrl = (currentScript && currentScript.dataset.catalog) || 'catalog.json';
+
 async function loadCatalog() {
-  const res = await fetch('catalog.json');
+  const res = await fetch(catalogUrl);
   if (!res.ok) throw new Error('Failed to load catalog');
   return res.json();
 }
