@@ -8,43 +8,131 @@
 </head>
 <body>
   <header>
-    <h1>Ceradon UxS Architect</h1>
-    <div class="small">Offline-first UxS design sandbox</div>
+    <div>
+      <h1>Ceradon UxS Architect</h1>
+      <p class="subtitle">Offline-first sandbox for UxS stack design and evaluation.</p>
+    </div>
+    <div class="badge">Client-side only · Field editable catalogs</div>
   </header>
-  <div class="container">
-    <div class="panel" id="controls">
-      <h2>Stack Builder</h2>
-      <label for="frame">Frame</label>
-      <select id="frame"></select>
-      <label for="propulsion">Propulsion</label>
-      <select id="propulsion"></select>
-      <label for="battery">Battery</label>
-      <select id="battery"></select>
-      <label for="compute">Compute</label>
-      <select id="compute"></select>
-      <label for="radio">Radio</label>
-      <select id="radio"></select>
-      <label for="payloads">Payloads</label>
-      <select id="payloads" multiple size="5"></select>
-      <details style="margin-top: 10px;">
-        <summary>Notes</summary>
-        <div class="small">Catalog stays simple JSON for quick edits in the field. Payload slots are open-ended to accommodate CSI-based pose arrays later.</div>
-      </details>
-      <button id="evaluate">Evaluate Stack</button>
-    </div>
 
-    <div class="panel">
-      <h2>Outputs</h2>
+  <main class="layout">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Stack Builder</h2>
+          <p class="muted">Select components, evaluate power/weight, and keep options ready for inventory mode.</p>
+        </div>
+        <div class="controls-inline">
+          <label>Domain
+            <select id="domain">
+              <option value="air" selected>Air</option>
+              <option value="ground">Ground</option>
+              <option value="maritime">Maritime</option>
+            </select>
+          </label>
+          <label>Mission role
+            <select id="missionRole"></select>
+          </label>
+          <label>EMCON
+            <select id="emcon"></select>
+          </label>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <label>Stack name
+          <input id="stackName" placeholder="Long range scout" />
+        </label>
+        <label>Frame
+          <select id="frame"></select>
+        </label>
+        <label>Motor / ESC
+          <select id="motorEsc"></select>
+        </label>
+        <label>Flight controller
+          <select id="flightController"></select>
+        </label>
+        <label>Battery
+          <select id="battery"></select>
+        </label>
+        <label>Compute
+          <select id="compute"></select>
+        </label>
+        <label>Camera
+          <select id="camera"></select>
+        </label>
+        <label>Payloads
+          <select id="payloads" multiple size="5"></select>
+        </label>
+      </div>
+
+      <div class="grid two">
+        <label>RC Receiver
+          <select id="rcReceiver"></select>
+        </label>
+        <label>RC Antenna
+          <select id="rcAntenna"></select>
+        </label>
+        <label>VTX
+          <select id="vtx"></select>
+        </label>
+        <label>VTX Antenna
+          <select id="vtxAntenna"></select>
+        </label>
+        <label>Aux radio
+          <select id="auxRadio"></select>
+        </label>
+        <label>Aux radio antenna
+          <select id="auxRadioAntenna"></select>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="refreshBtn">Evaluate stack</button>
+        <button id="resetBtn" class="ghost">Reset selections</button>
+      </div>
+      <div id="appWarning" class="warning"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Performance snapshot</h2>
       <div class="metrics" id="metrics"></div>
-      <div style="margin-top: 12px;" class="tag-row" id="roles"></div>
-      <div id="warnings" style="margin-top: 12px;"></div>
+      <div class="tags" id="roles"></div>
+      <ul id="warnings" class="warnings-list"></ul>
 
-      <h2 style="margin-top:20px;">Role-aligned payloads</h2>
-      <label for="roleFilter">Role</label>
-      <select id="roleFilter"></select>
-      <ul class="list" id="roleList"></ul>
+      <h3>Stack detail</h3>
+      <div id="stackCards" class="card-grid"></div>
+    </section>
+  </main>
+
+  <section class="panel wide">
+    <div class="panel-header">
+      <div>
+        <h2>Catalog slices</h2>
+        <p class="muted">Library entries filtered by domain. Catalog lives in <code>/web/data</code> for quick field edits.</p>
+      </div>
+      <div class="controls-inline">
+        <label>Payload role filter
+          <select id="payloadRoleFilter"></select>
+        </label>
+      </div>
     </div>
-  </div>
-  <script src="app.js"></script>
+    <div class="responsive-grid">
+      <div>
+        <h4>Payload library</h4>
+        <ul id="payloadLibrary" class="list"></ul>
+      </div>
+      <div>
+        <h4>Frames & mesh nodes</h4>
+        <ul id="library" class="list"></ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p class="muted">No network calls beyond local JSON. Future inventory mode can bind these selectors to stored manifests without backend changes.</p>
+  </footer>
+
+  <script type="module" src="dist/ui.js"></script>
 </body>
 </html>
