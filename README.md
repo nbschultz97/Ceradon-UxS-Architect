@@ -25,7 +25,7 @@ python -m cli.uxs_architect.cli evaluate \
 Use `--json` to emit structured output for logging or dashboards.
 
 ## Web usage
-Open `web/index.html` in a browser. It loads `web/catalog.json` and mirrors the CLI calculations, rendering weight, power budget, endurance, role tags, and warnings.
+Open https://nbschultz97.github.io/Ceradon-UxS-Architect/ (or load `web/index.html` locally). It automatically redirects to the static UI under `/web/`, loads the catalog, and mirrors the CLI calculations (weight, power budget, endurance, role tags, and warnings).
 
 ## Extending
 - Expand `data/catalog.json` with new components or role tags.
