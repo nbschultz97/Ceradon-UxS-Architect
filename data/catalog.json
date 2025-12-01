@@ -1,0 +1,181 @@
+{
+  "frames": [
+    {
+      "id": "scout_quad",
+      "name": "Scout Quad",
+      "type": "multirotor",
+      "empty_mass_kg": 2.6,
+      "max_payload_kg": 1.8,
+      "max_takeoff_kg": 4.8,
+      "drag_cdA": 0.45,
+      "role_tags": ["recon", "relay", "loiter"],
+      "notes": "Foldable quad optimized for low acoustic/thermal signature."
+    },
+    {
+      "id": "skyeye_vtol",
+      "name": "SkyEye VTOL",
+      "type": "vtol",
+      "empty_mass_kg": 4.4,
+      "max_payload_kg": 3.0,
+      "max_takeoff_kg": 9.2,
+      "drag_cdA": 0.68,
+      "role_tags": ["recon", "relay", "strike-capable"],
+      "notes": "Tilt-rotor wing with generous fuselage volume for sensors."
+    },
+    {
+      "id": "prowler_ugv",
+      "name": "Prowler UGV",
+      "type": "ground",
+      "empty_mass_kg": 6.0,
+      "max_payload_kg": 4.0,
+      "max_takeoff_kg": 12.0,
+      "drag_cdA": 0.0,
+      "role_tags": ["recon", "decoy", "strike-capable"],
+      "notes": "6x6 rover with sealed bay for wet-weather comms relay."
+    }
+  ],
+  "propulsion": [
+    {
+      "id": "quad_prop_v2",
+      "name": "Quad Thrust Pack v2",
+      "thrust_kg": 7.2,
+      "hover_power_w": 420,
+      "mass_kg": 0.9,
+      "compatible_frames": ["scout_quad", "skyeye_vtol"],
+      "notes": "Efficient 17\" props tuned for hover endurance."
+    },
+    {
+      "id": "vtol_heavy_lift",
+      "name": "VTOL Heavy Lift",
+      "thrust_kg": 12.0,
+      "hover_power_w": 760,
+      "mass_kg": 1.5,
+      "compatible_frames": ["skyeye_vtol"],
+      "notes": "High static thrust for vertical recoveries with payloads."
+    },
+    {
+      "id": "ugv_drive",
+      "name": "UGV Electric Drive",
+      "thrust_kg": 14.0,
+      "hover_power_w": 180,
+      "mass_kg": 1.2,
+      "compatible_frames": ["prowler_ugv"],
+      "notes": "Quiet in-hub motors with regenerative braking."
+    }
+  ],
+  "batteries": [
+    {
+      "id": "endurance_4s_lipo",
+      "name": "Endurance 4S LiPo",
+      "capacity_wh": 420,
+      "mass_kg": 1.1,
+      "continuous_discharge_w": 1000,
+      "chemistry": "LiPo",
+      "notes": "Balanced energy density for cold-weather sorties."
+    },
+    {
+      "id": "hv_6s_lipo",
+      "name": "HV 6S LiPo",
+      "capacity_wh": 520,
+      "mass_kg": 1.4,
+      "continuous_discharge_w": 1400,
+      "chemistry": "LiPo",
+      "notes": "High-voltage pack for rapid climbs and dash speeds."
+    },
+    {
+      "id": "ugv_liion_brick",
+      "name": "UGV Li-Ion Brick",
+      "capacity_wh": 620,
+      "mass_kg": 2.1,
+      "continuous_discharge_w": 900,
+      "chemistry": "Li-Ion",
+      "notes": "Ruggedized brick with tool-less swap bay."
+    }
+  ],
+  "compute": [
+    {
+      "id": "rpi5",
+      "name": "Raspberry Pi 5",
+      "power_w": 15,
+      "mass_kg": 0.19,
+      "ai_tops": 10,
+      "notes": "Edge-friendly SBC for radio control, logging, and CSI capture."
+    },
+    {
+      "id": "jetson_nano",
+      "name": "Jetson Nano",
+      "power_w": 25,
+      "mass_kg": 0.3,
+      "ai_tops": 0.5,
+      "notes": "Baseline GPU node for pose models like WiPose in the loop."
+    },
+    {
+      "id": "nvidia_orin_nx",
+      "name": "NVIDIA Orin NX",
+      "power_w": 35,
+      "mass_kg": 0.32,
+      "ai_tops": 100,
+      "notes": "High-end edge inference for dense CSI-based pose estimation."
+    }
+  ],
+  "radios": [
+    {
+      "id": "lband_mesh",
+      "name": "L-Band Mesh",
+      "power_w": 12,
+      "mass_kg": 0.35,
+      "range_km": 35,
+      "notes": "Resilient MANET radio for beyond-LOS control links."
+    },
+    {
+      "id": "cband_ofdm",
+      "name": "C-Band OFDM",
+      "power_w": 18,
+      "mass_kg": 0.28,
+      "range_km": 12,
+      "notes": "High-throughput OFDM downlink for video and CSI transport."
+    },
+    {
+      "id": "uhf_los",
+      "name": "UHF LOS",
+      "power_w": 8,
+      "mass_kg": 0.22,
+      "range_km": 8,
+      "notes": "Low-observable LOS radio for short-range relays."
+    }
+  ],
+  "payloads": [
+    {
+      "id": "eo_ir_ball",
+      "name": "EO/IR Ball",
+      "mass_kg": 0.8,
+      "power_w": 22,
+      "role_tags": ["recon", "strike-capable"],
+      "notes": "Gimballed EO/IR turret with ISR-grade stabilization."
+    },
+    {
+      "id": "relay_node",
+      "name": "Relay Node",
+      "mass_kg": 0.6,
+      "power_w": 10,
+      "role_tags": ["relay", "loiter"],
+      "notes": "Dual-radio payload for airborne mesh backhaul."
+    },
+    {
+      "id": "decoy_emitter",
+      "name": "Decoy Emitter",
+      "mass_kg": 0.7,
+      "power_w": 40,
+      "role_tags": ["decoy", "loiter"],
+      "notes": "Programmable signature generator with EMCON presets."
+    },
+    {
+      "id": "csi_pose_array",
+      "name": "CSI Pose Array",
+      "mass_kg": 0.9,
+      "power_w": 28,
+      "role_tags": ["recon", "pose-detection"],
+      "notes": "Phase-synced antenna cluster sized for through-wall pose mapping."
+    }
+  ]
+}
