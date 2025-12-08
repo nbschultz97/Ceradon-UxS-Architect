@@ -162,6 +162,13 @@
           <label>Payloads
             <select id="payloads" multiple size="5"></select>
           </label>
+          <label>Node payloads (imported)
+            <div class="inline-input">
+              <select id="nodePayloads" multiple size="4"></select>
+              <button id="importNodes" class="ghost small" type="button">Import Node designs</button>
+              <input id="nodeFile" type="file" accept="application/json" style="display: none;" />
+            </div>
+          </label>
         </div>
 
         <div class="grid two">
@@ -185,9 +192,29 @@
           </label>
         </div>
 
+        <div class="grid two">
+          <label>Altitude band
+            <select id="altitudeBand"></select>
+          </label>
+          <label>Temperature band
+            <select id="temperatureBand"></select>
+          </label>
+          <label>Min thrust-to-weight (adjusted)
+            <input id="minTwr" type="number" step="0.05" placeholder="e.g., 1.3" />
+          </label>
+          <label>Min adjusted endurance (min)
+            <input id="minEndurance" type="number" step="1" placeholder="e.g., 20" />
+          </label>
+          <label>Max all-up weight (kg)
+            <input id="maxAuw" type="number" step="0.1" placeholder="e.g., 6.5" />
+          </label>
+        </div>
+
         <div class="actions">
           <button id="refreshBtn">Evaluate stack</button>
           <button id="resetBtn" class="ghost">Reset selections</button>
+          <button id="savePlatform" class="ghost">Save platform</button>
+          <button id="exportPlatforms" class="ghost">Export platforms</button>
         </div>
         <div id="appWarning" class="warning"></div>
       </section>
@@ -223,6 +250,14 @@
         <div>
           <h4>Frames & mesh nodes</h4>
           <ul id="library" class="list"></ul>
+        </div>
+        <div>
+          <h4>Imported node designs</h4>
+          <ul id="nodeLibrary" class="list"></ul>
+        </div>
+        <div>
+          <h4>Saved platforms</h4>
+          <ul id="savedPlatforms" class="list"></ul>
         </div>
       </div>
     </section>
