@@ -5,7 +5,17 @@ import json
 from typing import Any, Dict, List
 
 from .catalog_loader import load_catalog
-from .design import ComponentSelection, DesignResult, evaluate_design, list_category, recommended_roles
+from .design import (
+    ComponentSelection,
+    ConstraintSettings,
+    DesignResult,
+    Environment,
+    ALTITUDE_BANDS,
+    TEMPERATURE_BANDS,
+    evaluate_design,
+    list_category,
+    recommended_roles,
+)
 
 
 class CompactJSONEncoder(json.JSONEncoder):
@@ -13,6 +23,10 @@ class CompactJSONEncoder(json.JSONEncoder):
         if isinstance(o, DesignResult):
             return o.__dict__
         if isinstance(o, ComponentSelection):
+            return o.__dict__
+        if isinstance(o, Environment):
+            return o.__dict__
+        if isinstance(o, ConstraintSettings):
             return o.__dict__
         return super().default(o)
 
@@ -55,8 +69,18 @@ def handle_evaluate(catalog: Dict[str, Any], args: argparse.Namespace) -> None:
         compute=args.compute,
         radio=args.radio,
         payloads=tuple(args.payloads or ()),
+        mounted_nodes=tuple(args.nodes or ()),
     )
-    result = evaluate_design(catalog, selection)
+    environment = Environment(
+        altitude_band=args.altitude_band,
+        temperature_band=args.temperature_band,
+    )
+    constraints = ConstraintSettings(
+        min_thrust_to_weight=args.min_twr,
+        min_adjusted_endurance_min=args.min_endurance,
+        max_auw_kg=args.max_auw,
+    )
+    result = evaluate_design(catalog, selection, environment=environment, constraints=constraints)
     if args.json:
         print(json.dumps(result, cls=CompactJSONEncoder, indent=2))
         return
@@ -65,9 +89,16 @@ def handle_evaluate(catalog: Dict[str, Any], args: argparse.Namespace) -> None:
     print(f"Compute: {selection.compute}\nRadio: {selection.radio}\nPayloads: {', '.join(selection.payloads) or 'none'}\n")
     print(f"All-up weight: {result.mass_kg:.2f} kg")
     print(f"Payload margin: {result.payload_margin_kg:.2f} kg")
-    print(f"Thrust-to-weight: {result.thrust_to_weight:.2f}")
+    print(f"Thrust-to-weight: {result.thrust_to_weight:.2f} (adjusted: {result.adjusted_thrust_to_weight:.2f})")
     print(f"Power budget: {result.power_budget_w:.1f} W")
-    print(f"Est. endurance: {result.estimated_endurance_min:.1f} min")
+    print(
+        "Est. endurance: "
+        f"{result.estimated_endurance_min:.1f} min nominal / {result.adjusted_endurance_min:.1f} min env-adjusted"
+    )
+    print(
+        f"Environment: {ALTITUDE_BANDS[result.environment.altitude_band]['label']}, "
+        f"{TEMPERATURE_BANDS[result.environment.temperature_band]['label']}"
+    )
     print(f"Role tags: {', '.join(result.role_tags)}")
     if result.warnings:
         print("\nWarnings:")
@@ -96,6 +127,22 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--compute", required=True)
     eval_parser.add_argument("--radio", required=True)
     eval_parser.add_argument("--payload", dest="payloads", action="append")
+    eval_parser.add_argument("--node", dest="nodes", action="append", help="Mounted node IDs (for traceability)")
+    eval_parser.add_argument(
+        "--altitude-band",
+        choices=list(ALTITUDE_BANDS.keys()),
+        default="sea_level",
+        help="Environment altitude band for thrust margin",
+    )
+    eval_parser.add_argument(
+        "--temperature-band",
+        choices=list(TEMPERATURE_BANDS.keys()),
+        default="standard",
+        help="Environment temperature band for battery performance",
+    )
+    eval_parser.add_argument("--min-twr", type=float, help="Minimum acceptable thrust-to-weight (adjusted)")
+    eval_parser.add_argument("--min-endurance", type=float, help="Minimum environment-adjusted endurance (minutes)")
+    eval_parser.add_argument("--max-auw", type=float, help="Maximum AUW (kg)")
     eval_parser.add_argument("--json", action="store_true", help="Emit JSON instead of text")
     eval_parser.set_defaults(func=handle_evaluate)
 

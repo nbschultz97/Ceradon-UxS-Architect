@@ -1,7 +1,15 @@
-import { calculateEnergyWh, sum } from './utils.js';
+import { calculateEnergyWh, formatWeight, resolveAltitude, resolveTemperature, sum } from './utils.js';
 import { findById } from './catalog.js';
 
-export function buildStack(catalog, selection, missionRole, emconPosture, domain) {
+export function buildStack(
+  catalog,
+  selection,
+  missionRole,
+  emconPosture,
+  domain,
+  nodeLibrary = [],
+  environment = { altitude: 'sea_level', temperature: 'standard' }
+) {
   const stack = {
     name: selection.name || 'New Stack',
     domain,
@@ -18,8 +26,11 @@ export function buildStack(catalog, selection, missionRole, emconPosture, domain
     battery: findById(catalog.batteries, selection.battery),
     compute: findById(catalog.compute, selection.compute),
     payloads: (selection.payloads || []).map((id) => findById(catalog.payloads, id)).filter(Boolean),
+    nodePayloads: (selection.nodePayloads || []).map((id) => nodeLibrary.find((n) => n.id === id)).filter(Boolean),
+    mountedNodeIds: selection.nodePayloads || [],
     missionRole,
-    emconPosture
+    emconPosture,
+    environment
   };
   return stack;
 }
@@ -40,7 +51,9 @@ function avionicsPower(stack) {
   return computePower + auxPower + vtxPower + rcPower + fcPower;
 }
 
-export function evaluateStack(stack) {
+export function evaluateStack(stack, environment, constraints = {}) {
+  const altitude = resolveAltitude(environment?.altitude || 'sea_level');
+  const temperature = resolveTemperature(environment?.temperature || 'standard');
   const weights = [
     stack.frame?.weight_grams || 0,
     stack.motorEsc?.weight_grams || 0,
@@ -54,7 +67,8 @@ export function evaluateStack(stack) {
     stack.camera?.weight_grams || 0,
     stack.battery?.weight_grams || 0,
     stack.compute?.weight_grams || 0,
-    sum(stack.payloads, (p) => p.weight_grams || 0)
+    sum(stack.payloads, (p) => p.weight_grams || 0),
+    sum(stack.nodePayloads || [], (p) => p.weight_grams || 0)
   ];
   const totalWeight = sum(weights);
 
@@ -79,14 +93,19 @@ export function evaluateStack(stack) {
 
   const thrustTotal = stack.motorEsc ? stack.motorEsc.max_thrust_per_motor_g * stack.motorEsc.motor_count : 0;
   const thrustToWeight = totalWeight > 0 ? thrustTotal / totalWeight : 0;
+  const adjustedThrustToWeight = totalWeight > 0 ? (thrustTotal * altitude.thrustEfficiency) / totalWeight : 0;
 
   const payloadCapacity = stack.frame?.max_auw_grams || 0;
-  const payloadMass = sum(stack.payloads, (p) => p.weight_grams || 0);
+  const payloadMass = sum(stack.payloads, (p) => p.weight_grams || 0) + sum(stack.nodePayloads || [], (p) => p.weight_grams || 0);
 
   const propulsion = propulsionPower(stack);
-  const payloadPower = sum(stack.payloads, (p) => p.power_draw_typical_w || 0);
+  const payloadPower = sum([...stack.payloads, ...(stack.nodePayloads || [])], (p) => p.power_draw_typical_w || 0);
   const powerBudget = propulsion + avionicsPower(stack) + payloadPower;
-  const enduranceMinutes = powerBudget > 0 ? (calculateEnergyWh(stack.battery) * 0.9) / powerBudget * 60 : 0;
+  const adjustedPower = powerBudget * (1 + altitude.powerPenalty);
+  const nominalCapacity = calculateEnergyWh(stack.battery) * 0.9;
+  const adjustedCapacity = nominalCapacity * temperature.capacityFactor;
+  const enduranceMinutes = powerBudget > 0 ? (nominalCapacity / powerBudget) * 60 : 0;
+  const adjustedEnduranceMinutes = adjustedPower > 0 ? (adjustedCapacity / adjustedPower) * 60 : 0;
 
   const warnings = [];
   if (stack.frame && stack.battery && !stack.frame.recommended_battery_s_cells.includes(stack.battery.s_cells)) {
@@ -98,6 +117,11 @@ export function evaluateStack(stack) {
   }
   if (stack.frame && payloadCapacity && totalWeight > payloadCapacity) warnings.push('All-up weight exceeds frame limit');
   if (stack.domain === 'air' && thrustToWeight < 1.3) warnings.push('Thrust-to-weight under 1.3 limits climb margin');
+  if (stack.domain === 'air' && adjustedThrustToWeight < 1.3) {
+    warnings.push('Adjusted thrust-to-weight under 1.3 in current environment band');
+  } else if (stack.domain === 'air' && adjustedThrustToWeight < 1.4) {
+    warnings.push('Adjusted thrust margin is thin; consider more thrust or lighter payloads');
+  }
   if (stack.motorEsc && stack.frame && !stack.motorEsc.compatible_frame_form_factors.includes(stack.frame.form_factor)) {
     warnings.push('Motor/ESC set not tagged for this frame form factor');
   }
@@ -113,16 +137,30 @@ export function evaluateStack(stack) {
 
   const roleTags = new Set(stack.frame?.typical_role_tags || []);
   stack.payloads.forEach((p) => (p.role_tags || []).forEach((r) => roleTags.add(r)));
+  (stack.nodePayloads || []).forEach((p) => (p.role_tags || []).forEach((r) => roleTags.add(r)));
+
+  if (constraints?.maxAuw && totalWeight > constraints.maxAuw * 1000) {
+    warnings.push(`All-up weight ${formatWeight(totalWeight)} exceeds configured max ${constraints.maxAuw} kg`);
+  }
+  if (constraints?.minTwr && adjustedThrustToWeight < constraints.minTwr) {
+    warnings.push(`Adjusted thrust-to-weight ${adjustedThrustToWeight.toFixed(2)} below minimum ${constraints.minTwr}`);
+  }
+  if (constraints?.minEndurance && adjustedEnduranceMinutes < constraints.minEndurance) {
+    warnings.push(`Adjusted endurance ${adjustedEnduranceMinutes.toFixed(1)} min below minimum ${constraints.minEndurance} min`);
+  }
 
   return {
     totalWeight,
     totalCost,
     thrustToWeight,
+    adjustedThrustToWeight,
     enduranceMinutes,
+    adjustedEnduranceMinutes,
     powerBudget,
     payloadMass,
     payloadCapacity,
     warnings,
-    roleTags: Array.from(roleTags)
+    roleTags: Array.from(roleTags),
+    environment: { altitude: altitude.id, temperature: temperature.id }
   };
 }
