@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from typing import Any, Dict, List
 
 from .catalog_loader import load_catalog
@@ -16,6 +17,9 @@ from .design import (
     list_category,
     recommended_roles,
 )
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+WHITEFROST_PATH = BASE_DIR / "data" / "whitefrost_mission_project.json"
 
 
 class CompactJSONEncoder(json.JSONEncoder):
@@ -59,6 +63,128 @@ def handle_roles(catalog: Dict[str, Any], args: argparse.Namespace) -> None:
         print(f"No payloads tagged with role '{args.role}'")
         return
     _print_table(matches, ["id", "name", "mass_kg", "power_w", "role_tags"])
+
+
+def _sanitize_location(loc: Dict[str, Any] | None) -> Dict[str, float] | None:
+    if not isinstance(loc, dict):
+        return None
+    lat = loc.get("lat")
+    lon = loc.get("lon")
+    if lat is None or lon is None:
+        return None
+    cleaned: Dict[str, float] = {"lat": float(lat), "lon": float(lon)}
+    if "elevation_m" in loc:
+        cleaned["elevation_m"] = float(loc["elevation_m"])
+    return cleaned
+
+
+def load_mission_project(path: str | Path) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def mission_project_to_geojson(project: Dict[str, Any]) -> Dict[str, Any]:
+    bundle = project.get("mission_project") or project
+    features: List[Dict[str, Any]] = []
+
+    def push_point(item: Dict[str, Any], feature_type: str) -> None:
+        loc = _sanitize_location(item.get("location"))
+        if not loc:
+            return
+        coords = [loc["lon"], loc["lat"]]
+        if "elevation_m" in loc:
+            coords.append(loc["elevation_m"])
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": coords},
+                "properties": {
+                    "id": item.get("id"),
+                    "name": item.get("name"),
+                    "type": feature_type,
+                    "origin_tool": item.get("origin_tool", bundle.get("origin_tool", "uxs")),
+                    "role": item.get("role") or item.get("mission_roles") or [],
+                    "rf_band_ghz": item.get("rf_band_ghz"),
+                    "rf_bands_ghz": item.get("rf_bands_ghz"),
+                    "power_draw_w": item.get("power_draw_w"),
+                    "power_budget_w": item.get("power_budget_w"),
+                    "environment_ref": item.get("environment_ref"),
+                    "constraints_ref": item.get("constraints_ref"),
+                },
+            }
+        )
+
+    for node in bundle.get("nodes", []):
+        push_point(node, "node")
+    for platform in bundle.get("platforms", []):
+        push_point(platform, "platform")
+
+    loc_index: Dict[str, Dict[str, float]] = {}
+    for node in bundle.get("nodes", []):
+        loc = _sanitize_location(node.get("location"))
+        if loc:
+            loc_index[node.get("id")] = loc
+    for platform in bundle.get("platforms", []):
+        loc = _sanitize_location(platform.get("location"))
+        if loc:
+            loc_index[platform.get("id")] = loc
+
+    for link in bundle.get("mesh_links", []):
+        a = loc_index.get(link.get("from"))
+        b = loc_index.get(link.get("to"))
+        if not a or not b:
+            continue
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": [[a["lon"], a["lat"]], [b["lon"], b["lat"]]]},
+                "properties": {
+                    "id": link.get("id"),
+                    "name": link.get("name", link.get("id")),
+                    "type": "mesh_link",
+                    "origin_tool": link.get("origin_tool", "mesh"),
+                    "rf_band_ghz": link.get("rf_band_ghz"),
+                    "notes": link.get("notes"),
+                },
+            }
+        )
+
+    return {"type": "FeatureCollection", "features": features}
+
+
+def mission_project_to_cot(project: Dict[str, Any]) -> Dict[str, Any]:
+    bundle = project.get("mission_project") or project
+    events: List[Dict[str, Any]] = []
+
+    def push_event(item: Dict[str, Any], type_code: str) -> None:
+        loc = _sanitize_location(item.get("location"))
+        if not loc:
+            return
+        roles = item.get("mission_roles") or item.get("role") or []
+        events.append(
+            {
+                "id": item.get("id"),
+                "type": type_code,
+                "how": "m-g",
+                "remarks": f"{item.get('name')} ({', '.join(roles) or 'unspecified'})",
+                "point": {"lat": loc["lat"], "lon": loc["lon"], "hae": loc.get("elevation_m")},
+                "detail": {
+                    "origin_tool": item.get("origin_tool", bundle.get("origin_tool", "uxs")),
+                    "rf_band_ghz": item.get("rf_band_ghz"),
+                    "rf_bands_ghz": item.get("rf_bands_ghz"),
+                    "power_draw_w": item.get("power_draw_w"),
+                    "power_budget_w": item.get("power_budget_w"),
+                    "constraints_ref": item.get("constraints_ref"),
+                    "environment_ref": item.get("environment_ref"),
+                },
+            }
+        )
+
+    for platform in bundle.get("platforms", []):
+        push_event(platform, "a-f-A-M-UxS")
+    for node in bundle.get("nodes", []):
+        push_event(node, "b-r-f")
+    return {"events": events}
 
 
 def handle_evaluate(catalog: Dict[str, Any], args: argparse.Namespace) -> None:
@@ -106,6 +232,31 @@ def handle_evaluate(catalog: Dict[str, Any], args: argparse.Namespace) -> None:
             print(f"- {warn}")
 
 
+def handle_mission(_: Dict[str, Any], args: argparse.Namespace) -> None:
+    if args.whitefrost:
+        project = load_mission_project(args.file or WHITEFROST_PATH)
+    else:
+        project = load_mission_project(args.file)
+
+    bundle = project.get("mission_project") or project
+    mission = bundle.get("mission", {})
+    print(
+        f"Mission: {mission.get('name', 'Unknown')} | platforms: {len(bundle.get('platforms', []))} | "
+        f"nodes: {len(bundle.get('nodes', []))} | mesh links: {len(bundle.get('mesh_links', []))}"
+    )
+
+    if args.geojson_out:
+        geojson = mission_project_to_geojson(project)
+        Path(args.geojson_out).write_text(json.dumps(geojson, indent=2), encoding="utf-8")
+        print(f"GeoJSON written to {args.geojson_out}")
+    if args.cot_out:
+        cot = mission_project_to_cot(project)
+        Path(args.cot_out).write_text(json.dumps(cot, indent=2), encoding="utf-8")
+        print(f"CoT stub written to {args.cot_out}")
+    if not args.geojson_out and not args.cot_out:
+        print(json.dumps(project, indent=2))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Ceradon UxS Architect CLI")
     parser.add_argument("--catalog", default=None, help="Path to catalog JSON (defaults to data/catalog.json)")
@@ -145,6 +296,14 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--max-auw", type=float, help="Maximum AUW (kg)")
     eval_parser.add_argument("--json", action="store_true", help="Emit JSON instead of text")
     eval_parser.set_defaults(func=handle_evaluate)
+
+    mission_parser = sub.add_parser("mission", help="Import/export MissionProject bundles")
+    mission_source = mission_parser.add_mutually_exclusive_group(required=True)
+    mission_source.add_argument("--whitefrost", action="store_true", help="Emit the Project WHITEFROST preset")
+    mission_source.add_argument("--file", help="Path to MissionProject JSON")
+    mission_parser.add_argument("--geojson-out", help="Write GeoJSON overlay to file")
+    mission_parser.add_argument("--cot-out", help="Write CoT-like JSON stub to file")
+    mission_parser.set_defaults(func=handle_mission)
 
     return parser
 
