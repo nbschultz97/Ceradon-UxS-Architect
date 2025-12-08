@@ -4,8 +4,11 @@ Offline-first UxS design sandbox inspired by the Ceradon Node Architect flow. It
 
 ## Layout
 - `data/catalog.json` — shared component library (frames, propulsion, batteries, compute, radios, payloads).
+- `data/whitefrost_mission_project.json` — Project WHITEFROST preset in MissionProject format.
 - `cli/uxs_architect` — Python 3.9+ CLI package for design checks.
 - `web/` — static site that mirrors the CLI calculations.
+- `docs/mission_project_schema.md` — shared MissionProject schema used across Architect tools.
+- `docs/atak_exports.md` — notes on the GeoJSON and CoT stubs emitted for TAK-style tools.
 
 ## CLI usage
 Run with system Python (no third-party deps):
@@ -24,6 +27,9 @@ python -m cli.uxs_architect.cli evaluate \
 
 Use `--json` to emit structured output for logging or dashboards.
 
+### MissionProject import/export and TAK handoff
+- Emit a MissionProject bundle with `python -m cli.uxs_architect.cli mission --whitefrost` or `--file my_project.json --geojson-out` / `--cot-out` to generate TAK-friendly overlays. See `docs/mission_project_schema.md` and `docs/atak_exports.md` for field-level notes.
+
 ## Web usage
 Open https://nbschultz97.github.io/Ceradon-UxS-Architect/ (or load `web/index.html` locally). It automatically redirects to the static UI under `/web/`, loads the catalog, and mirrors the CLI calculations (weight, power budget, endurance, role tags, and warnings).
 
@@ -35,28 +41,10 @@ Open https://nbschultz97.github.io/Ceradon-UxS-Architect/ (or load `web/index.ht
 - Select an altitude band and temperature band to model thinner air (reduced thrust, higher hover power) and cold-soaked packs (reduced available Wh). The UI and CLI both surface nominal and environment-adjusted endurance plus a second thrust-to-weight value.
 - Optional constraints let you flag stacks that fall under a minimum adjusted thrust-to-weight, minimum adjusted endurance, or a maximum AUW.
 
-### Exporting platform JSON
-- Click **Export platforms** to download a Mission Architect/KitSmith-friendly JSON bundle:
-  ```json
-  {
-    "platforms": [
-      {
-        "id": "uuid",
-        "name": "Long range scout",
-        "frame_type": "quad",
-        "auw_kg": 4.2,
-        "nominal_endurance_min": 28.5,
-        "adjusted_endurance_min": 24.3,
-        "thrust_to_weight": 1.45,
-        "adjusted_thrust_to_weight": 1.32,
-        "mounted_node_ids": ["node-123"],
-        "intended_roles": ["recon", "relay"],
-        "environment": {"altitude": "high_desert", "temperature": "cold"}
-      }
-    ],
-    "exported_at": "2024-01-01T00:00:00Z"
-  }
-  ```
+### MissionProject, GeoJSON, and CoT exports
+- Use **Import MissionProject** / **Export MissionProject** in the UI to round-trip the schema described in `docs/mission_project_schema.md`. Exports tag each entity with `origin_tool`, include environment/constraint references, and stay tolerant of partial inputs (e.g., mesh links without coordinates).
+- **Export GeoJSON** and **Export CoT stub** buttons emit TAK-friendly overlays derived from the MissionProject bundle. See `docs/atak_exports.md` for the exact fields.
+- A **WHITEFROST Demo** button loads the preset cold-weather scenario from `data/whitefrost_mission_project.json` (mesh relays, recon quad, sustainment cache).
 
 ## Extending
 - Expand `data/catalog.json` with new components or role tags.

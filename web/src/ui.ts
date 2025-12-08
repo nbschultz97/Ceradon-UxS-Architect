@@ -1,4 +1,4 @@
-import { loadCatalog, filterByDomain, defaultSelections, filterByRoleTags } from './catalog.js';
+import { loadCatalog, filterByDomain, defaultSelections, filterByRoleTags, findById } from './catalog.js';
 import { buildStack, evaluateStack } from './evaluator.js';
 import {
   altitudeBands,
@@ -56,6 +56,12 @@ const selectors = {
   maxAuw: document.querySelector('#maxAuw'),
   savePlatform: document.querySelector('#savePlatform'),
   exportPlatforms: document.querySelector('#exportPlatforms'),
+  importMission: document.querySelector('#importMission'),
+  exportMission: document.querySelector('#exportMission'),
+  exportGeojson: document.querySelector('#exportGeojson'),
+  exportCot: document.querySelector('#exportCot'),
+  missionFile: document.querySelector('#missionFile'),
+  loadWhitefrost: document.querySelector('#loadWhitefrost'),
   savedPlatforms: document.querySelector('#savedPlatforms'),
   importNodes: document.querySelector('#importNodes'),
   nodeFile: document.querySelector('#nodeFile')
@@ -65,17 +71,32 @@ let catalog;
 let selection = {};
 let nodeLibrary = [];
 let savedPlatforms = [];
+let missionMeta = { id: 'mission-local', name: 'Ad hoc mission', origin_tool: 'uxs' };
+let meshLinks = [];
+let kits = [];
 let environment = { altitude: 'sea_level', temperature: 'standard' };
 let constraintPrefs = { minTwr: null, minEndurance: null, maxAuw: null };
 let lastResult = null;
 let lastStack = null;
 
 function loadPersistedState() {
-  const fallback = { selection: {}, nodeLibrary: [], savedPlatforms: [], environment, constraints: constraintPrefs };
+  const fallback = {
+    selection: {},
+    nodeLibrary: [],
+    savedPlatforms: [],
+    missionMeta,
+    meshLinks,
+    kits,
+    environment,
+    constraints: constraintPrefs
+  };
   const state = readStoredState(STORAGE_KEY, fallback);
   selection = state.selection || selection;
   nodeLibrary = state.nodeLibrary || [];
   savedPlatforms = state.savedPlatforms || [];
+  missionMeta = state.missionMeta || missionMeta;
+  meshLinks = state.meshLinks || [];
+  kits = state.kits || [];
   environment = state.environment || environment;
   constraintPrefs = state.constraints || constraintPrefs;
 }
@@ -85,6 +106,9 @@ function persistAppState() {
     selection,
     nodeLibrary,
     savedPlatforms,
+    missionMeta,
+    meshLinks,
+    kits,
     environment,
     constraints: constraintPrefs
   });
@@ -341,12 +365,13 @@ function renderSavedPlatforms() {
     const li = document.createElement('li');
     li.innerHTML = `<div class="item-title">${entry.name || 'Platform'} (${entry.frameType || 'frame'})</div>
       <div class="item-meta">${formatWeight(entry.metrics.totalWeight)} · TW ${entry.metrics.thrustToWeight.toFixed(2)} (adj ${entry.metrics.adjustedThrustToWeight.toFixed(2)}) · ${entry.metrics.adjustedEnduranceMinutes.toFixed(1)} min adj</div>
-      <div class="item-notes">${resolveAltitude(entry.environment.altitude).name} · ${resolveTemperature(entry.environment.temperature).name}</div>`;
+      <div class="item-notes">${resolveAltitude(entry.environment.altitude).name} · ${resolveTemperature(entry.environment.temperature).name} · ${entry.origin_tool || 'uxs'}</div>`;
     const loadBtn = document.createElement('button');
     loadBtn.className = 'ghost';
     loadBtn.textContent = 'Load';
     loadBtn.addEventListener('click', () => {
-      selection = { ...entry.selection };
+      const defaults = defaultSelections(catalog, entry.selection?.domain || 'air');
+      selection = { ...defaults, ...entry.selection };
       environment = { ...entry.environment };
       constraintPrefs = { ...entry.constraints };
       selectors.domain.value = selection.domain || selectors.domain.value;
@@ -362,6 +387,310 @@ function renderSavedPlatforms() {
   });
 }
 
+function sanitizeLocation(loc) {
+  if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lon)) return null;
+  const cleaned = { lat: Number(loc.lat), lon: Number(loc.lon) };
+  if (Number.isFinite(loc.elevation_m)) cleaned.elevation_m = Number(loc.elevation_m);
+  return cleaned;
+}
+
+function missionPlatformToSnapshot(p) {
+  const domain = p.domain || selection.domain || 'air';
+  const defaults = catalog ? defaultSelections(catalog, domain) : {};
+  const env = p.environment || {};
+  return {
+    id: p.id || p.platform_id || `platform-${Date.now()}`,
+    name: p.name || 'Imported platform',
+    frameType: p.frame_type || p.frame || defaults.frame || 'frame',
+    origin_tool: p.origin_tool || 'uxs',
+    selection: {
+      ...defaults,
+      ...(p.selection || {}),
+      payloads: p.payload_ids || p.payloads || defaults.payloads || [],
+      nodePayloads: p.mounted_node_ids || [],
+      domain,
+      frame: p.frame || p.frame_type || defaults.frame
+    },
+    environment: {
+      altitude: env.altitude_band || p.altitude || environment.altitude,
+      temperature: env.temperature_band || p.temperature || environment.temperature
+    },
+    constraints: { ...constraintPrefs },
+    metrics: {
+      totalWeight: Number.isFinite(p.auw_kg) ? p.auw_kg * 1000 : 0,
+      thrustToWeight: Number(p.thrust_to_weight || 0),
+      adjustedThrustToWeight: Number(p.adjusted_thrust_to_weight || p.thrust_to_weight || 0),
+      enduranceMinutes: Number(p.nominal_endurance_min || p.adjusted_endurance_min || 0),
+      adjustedEnduranceMinutes: Number(p.adjusted_endurance_min || p.nominal_endurance_min || 0),
+      payloadMass: Number.isFinite(p.payload_mass_kg) ? p.payload_mass_kg * 1000 : 0,
+      powerBudget: p.power_budget_w || null
+    },
+    roleTags: p.mission_roles || p.intended_roles || [],
+    mountedNodes: p.mounted_node_ids || [],
+    geo: sanitizeLocation(p.location)
+  };
+}
+
+function applyMissionProject(project) {
+  const bundle = project.mission_project || project;
+  missionMeta = { ...missionMeta, ...(bundle.mission || {}) };
+  meshLinks = bundle.mesh_links || [];
+  kits = bundle.kits || [];
+
+  const env = (bundle.environment && bundle.environment[0]) || {};
+  environment = {
+    altitude: env.altitude_band || environment.altitude,
+    temperature: env.temperature_band || environment.temperature
+  };
+  selectors.altitude.value = environment.altitude;
+  selectors.temperature.value = environment.temperature;
+
+  const c = (bundle.constraints && bundle.constraints[0]) || {};
+  constraintPrefs = {
+    minTwr: Number.isFinite(c.min_thrust_to_weight) ? c.min_thrust_to_weight : constraintPrefs.minTwr,
+    minEndurance: Number.isFinite(c.min_adjusted_endurance_min) ? c.min_adjusted_endurance_min : constraintPrefs.minEndurance,
+    maxAuw: Number.isFinite(c.max_auw_kg) ? c.max_auw_kg : constraintPrefs.maxAuw
+  };
+  hydrateConstraintInputs();
+
+  nodeLibrary = (bundle.nodes || []).map((n) => ({
+    id: n.id || n.node_id || n.uuid || n.name,
+    name: n.name || 'Imported node',
+    weight_grams: n.weight_grams || (Number.isFinite(n.mass_kg) ? Math.round(n.mass_kg * 1000) : 0),
+    power_draw_typical_w: n.power_w || n.power_draw_w || 0,
+    role_tags: n.role || n.role_tags || [],
+    origin_tool: n.origin_tool || 'node',
+    notes: n.notes || 'Imported from MissionProject',
+    location: sanitizeLocation(n.location)
+  }));
+
+  savedPlatforms = (bundle.platforms || []).map((p) => missionPlatformToSnapshot(p)).filter((p) => p.id);
+  renderNodeOptions();
+  renderNodeLibrary();
+  renderSavedPlatforms();
+  evaluateAndRender();
+  persistAppState();
+}
+
+function collectRfBands(entry) {
+  const rfSet = new Set(entry.rf_bands_ghz || []);
+  const sel = entry.selection || {};
+  const rc = findById(catalog.rcReceivers, sel.rcReceiver || sel.rc_receiver);
+  const vtx = findById(catalog.vtx, sel.vtx);
+  const aux = findById(catalog.auxRadios, sel.auxRadio || sel.aux_radio);
+  const rcAnt = findById(catalog.antennas, sel.rcAntenna || sel.rc_antenna);
+  const vtxAnt = findById(catalog.antennas, sel.vtxAntenna || sel.vtx_antenna);
+  const auxAnt = findById(catalog.antennas, sel.auxRadioAntenna || sel.aux_radio_antenna);
+  [rc, vtx, aux, rcAnt, vtxAnt, auxAnt]
+    .filter((item) => item && Number.isFinite(item.rf_band_ghz))
+    .forEach((item) => rfSet.add(Number(item.rf_band_ghz)));
+  return Array.from(rfSet);
+}
+
+function buildMissionProjectPayload() {
+  const envId = missionMeta.environment_id || 'env-local';
+  const constraintId = missionMeta.constraint_id || 'cst-local';
+  const environmentEntry = {
+    id: envId,
+    altitude_band: environment.altitude,
+    temperature_band: environment.temperature,
+    notes: missionMeta.environment_notes || 'Captured from UI environment selectors'
+  };
+  const constraintEntry = {
+    id: constraintId,
+    min_thrust_to_weight: constraintPrefs.minTwr ?? undefined,
+    min_adjusted_endurance_min: constraintPrefs.minEndurance ?? undefined,
+    max_auw_kg: constraintPrefs.maxAuw ?? undefined
+  };
+
+  const platforms = savedPlatforms.map((p) => {
+    const rfBands = collectRfBands(p);
+    const battery = p.selection?.battery ? findById(catalog.batteries, p.selection.battery) : null;
+    const batteryWh = battery ? (battery.capacity_mah * battery.voltage_nominal) / 1000 : undefined;
+    return {
+      id: p.id,
+      name: p.name,
+      origin_tool: p.origin_tool || 'uxs',
+      domain: p.selection?.domain || 'air',
+      frame_type: p.frameType || p.selection?.frame || 'frame',
+      payload_ids: p.selection?.payloads || [],
+      mounted_node_ids: p.mountedNodes || [],
+      rf_bands_ghz: rfBands,
+      power_budget_w: p.metrics?.powerBudget || undefined,
+      battery_wh: batteryWh,
+      auw_kg: Number.isFinite(p.metrics?.totalWeight) ? Number((p.metrics.totalWeight / 1000).toFixed(3)) : undefined,
+      nominal_endurance_min: p.metrics?.enduranceMinutes || undefined,
+      adjusted_endurance_min: p.metrics?.adjustedEnduranceMinutes || undefined,
+      thrust_to_weight: p.metrics?.thrustToWeight || undefined,
+      adjusted_thrust_to_weight: p.metrics?.adjustedThrustToWeight || undefined,
+      mission_roles: p.roleTags || [],
+      environment_ref: envId,
+      constraints_ref: constraintId,
+      location: p.geo || null,
+      notes: p.notes || undefined
+    };
+  });
+
+  const nodes = (nodeLibrary || []).map((n) => ({
+    id: n.id,
+    name: n.name,
+    role: n.role_tags || [],
+    origin_tool: n.origin_tool || 'node',
+    power_draw_w: n.power_draw_typical_w || 0,
+    weight_grams: n.weight_grams || 0,
+    rf_band_ghz: n.rf_band_ghz || undefined,
+    location: sanitizeLocation(n.location),
+    notes: n.notes
+  }));
+
+  return {
+    version: '1.0',
+    origin_tool: 'uxs',
+    mission: { ...missionMeta, origin_tool: missionMeta.origin_tool || 'uxs' },
+    environment: [environmentEntry],
+    constraints: [constraintEntry],
+    nodes,
+    platforms,
+    mesh_links: meshLinks || [],
+    kits: kits || []
+  };
+}
+
+function missionProjectToGeoJson(project) {
+  const bundle = project.mission_project || project;
+  const features = [];
+  const pushPoint = (item, type) => {
+    const loc = sanitizeLocation(item.location);
+    if (!loc) return;
+    const coords = Number.isFinite(loc.elevation_m)
+      ? [loc.lon, loc.lat, loc.elevation_m]
+      : [loc.lon, loc.lat];
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: coords },
+      properties: {
+        id: item.id,
+        name: item.name,
+        type,
+        origin_tool: item.origin_tool || bundle.origin_tool || 'uxs',
+        role: item.role || item.mission_roles || [],
+        rf_band_ghz: item.rf_band_ghz,
+        rf_bands_ghz: item.rf_bands_ghz,
+        power_draw_w: item.power_draw_w,
+        power_budget_w: item.power_budget_w,
+        environment_ref: item.environment_ref,
+        constraints_ref: item.constraints_ref
+      }
+    });
+  };
+
+  (bundle.nodes || []).forEach((n) => pushPoint(n, 'node'));
+  (bundle.platforms || []).forEach((p) => pushPoint(p, 'platform'));
+
+  const locIndex = new Map();
+  (bundle.nodes || []).forEach((n) => {
+    const loc = sanitizeLocation(n.location);
+    if (loc) locIndex.set(n.id, loc);
+  });
+  (bundle.platforms || []).forEach((p) => {
+    const loc = sanitizeLocation(p.location);
+    if (loc) locIndex.set(p.id, loc);
+  });
+
+  (bundle.mesh_links || []).forEach((link) => {
+    const a = locIndex.get(link.from);
+    const b = locIndex.get(link.to);
+    if (!a || !b) return;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: [[a.lon, a.lat], [b.lon, b.lat]] },
+      properties: {
+        id: link.id,
+        name: link.name || link.id,
+        type: 'mesh_link',
+        origin_tool: link.origin_tool || 'mesh',
+        rf_band_ghz: link.rf_band_ghz,
+        notes: link.notes
+      }
+    });
+  });
+
+  return { type: 'FeatureCollection', features };
+}
+
+function missionProjectToCot(project) {
+  const bundle = project.mission_project || project;
+  const events = [];
+  const pushEvent = (item, type) => {
+    const loc = sanitizeLocation(item.location);
+    if (!loc) return;
+    const roles = item.mission_roles || item.role || [];
+    events.push({
+      id: item.id,
+      type,
+      how: 'm-g',
+      remarks: `${item.name} (${roles.join(', ') || 'unspecified'})`,
+      point: { lat: loc.lat, lon: loc.lon, hae: loc.elevation_m },
+      detail: {
+        origin_tool: item.origin_tool || bundle.origin_tool || 'uxs',
+        rf_band_ghz: item.rf_band_ghz,
+        rf_bands_ghz: item.rf_bands_ghz,
+        power_draw_w: item.power_draw_w,
+        power_budget_w: item.power_budget_w,
+        constraints_ref: item.constraints_ref,
+        environment_ref: item.environment_ref
+      }
+    });
+  };
+
+  (bundle.platforms || []).forEach((p) => pushEvent(p, 'a-f-A-M-UxS'));
+  (bundle.nodes || []).forEach((n) => pushEvent(n, 'b-r-f'));
+  return { events };
+}
+
+async function handleMissionImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
+    applyMissionProject(json);
+    document.querySelector('#appWarning').textContent = 'MissionProject imported successfully.';
+  } catch (err) {
+    document.querySelector('#appWarning').textContent = err.message;
+  } finally {
+    selectors.missionFile.value = '';
+  }
+}
+
+async function loadWhitefrostDemo() {
+  try {
+    const res = await fetch('./data/whitefrost_mission_project.json');
+    const json = await res.json();
+    applyMissionProject(json);
+    document.querySelector('#appWarning').textContent = 'Loaded WHITEFROST demo mission.';
+  } catch (err) {
+    document.querySelector('#appWarning').textContent = err.message;
+  }
+}
+
+function exportMissionProjectJson() {
+  const payload = buildMissionProjectPayload();
+  downloadJson('mission_project.json', payload);
+}
+
+function exportGeojsonFromState() {
+  const payload = buildMissionProjectPayload();
+  const geo = missionProjectToGeoJson(payload);
+  downloadJson('mission_project_geojson.json', geo);
+}
+
+function exportCotFromState() {
+  const payload = buildMissionProjectPayload();
+  const cot = missionProjectToCot(payload);
+  downloadJson('mission_project_cot.json', cot);
+}
+
 function parseNodeDesigns(json) {
   const nodes = Array.isArray(json) ? json : json.nodes || json.designs || [];
   return nodes
@@ -374,6 +703,7 @@ function parseNodeDesigns(json) {
         weight_grams: weightGrams,
         power_draw_typical_w: n.power_w || n.power_draw_w || 0,
         role_tags: n.roles || n.role_tags || [],
+        origin_tool: n.origin_tool || 'node',
         notes: n.notes || 'Imported from Node Architect export'
       };
     })
@@ -410,6 +740,7 @@ function savePlatformSnapshot() {
     id,
     name: selection.name || 'Platform',
     frameType: lastStack.frame?.form_factor || lastStack.frame?.subtype || lastStack.frame?.id,
+    origin_tool: 'uxs',
     selection: { ...selection },
     environment: { ...environment },
     constraints: { ...constraintPrefs },
@@ -419,7 +750,8 @@ function savePlatformSnapshot() {
       adjustedThrustToWeight: lastResult.adjustedThrustToWeight,
       enduranceMinutes: lastResult.enduranceMinutes,
       adjustedEnduranceMinutes: lastResult.adjustedEnduranceMinutes,
-      payloadMass: lastResult.payloadMass
+      payloadMass: lastResult.payloadMass,
+      powerBudget: lastResult.powerBudget
     },
     roleTags: lastResult.roleTags,
     mountedNodes: selection.nodePayloads || []
@@ -430,24 +762,8 @@ function savePlatformSnapshot() {
 }
 
 function exportPlatformJson() {
-  if (!savedPlatforms.length) {
-    alert('No saved platforms to export yet.');
-    return;
-  }
-  const payload = savedPlatforms.map((p) => ({
-    id: p.id,
-    name: p.name,
-    frame_type: p.frameType,
-    auw_kg: Number((p.metrics.totalWeight / 1000).toFixed(3)),
-    nominal_endurance_min: Number(p.metrics.enduranceMinutes.toFixed(1)),
-    adjusted_endurance_min: Number(p.metrics.adjustedEnduranceMinutes.toFixed(1)),
-    thrust_to_weight: Number(p.metrics.thrustToWeight.toFixed(2)),
-    adjusted_thrust_to_weight: Number(p.metrics.adjustedThrustToWeight.toFixed(2)),
-    mounted_node_ids: p.mountedNodes || [],
-    intended_roles: p.roleTags || [],
-    environment: p.environment
-  }));
-  downloadJson('uxs_platforms.json', { platforms: payload, exported_at: new Date().toISOString() });
+  const payload = buildMissionProjectPayload();
+  downloadJson('mission_project.json', payload);
 }
 
 function evaluateAndRender() {
@@ -485,6 +801,12 @@ function wireEvents() {
   selectors.nodeFile?.addEventListener('change', handleNodeImport);
   selectors.savePlatform?.addEventListener('click', savePlatformSnapshot);
   selectors.exportPlatforms?.addEventListener('click', exportPlatformJson);
+  selectors.importMission?.addEventListener('click', () => selectors.missionFile?.click());
+  selectors.missionFile?.addEventListener('change', handleMissionImport);
+  selectors.exportMission?.addEventListener('click', exportMissionProjectJson);
+  selectors.exportGeojson?.addEventListener('click', exportGeojsonFromState);
+  selectors.exportCot?.addEventListener('click', exportCotFromState);
+  selectors.loadWhitefrost?.addEventListener('click', loadWhitefrostDemo);
 }
 
 async function main() {

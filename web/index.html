@@ -120,9 +120,9 @@
             <h2>Stack Builder</h2>
             <p class="muted">Select components, evaluate power/weight, and keep options ready for inventory mode.</p>
           </div>
-          <div class="controls-inline">
-            <label>Domain
-              <select id="domain">
+      <div class="controls-inline">
+          <label>Domain
+            <select id="domain">
                 <option value="air" selected>Air</option>
                 <option value="ground">Ground</option>
                 <option value="maritime">Maritime</option>
@@ -214,7 +214,16 @@
           <button id="refreshBtn">Evaluate stack</button>
           <button id="resetBtn" class="ghost">Reset selections</button>
           <button id="savePlatform" class="ghost">Save platform</button>
-          <button id="exportPlatforms" class="ghost">Export platforms</button>
+          <button id="loadWhitefrost" class="ghost">WHITEFROST Demo</button>
+        </div>
+
+        <div class="actions wrap">
+          <button id="exportPlatforms" class="ghost">Export MissionProject</button>
+          <button id="exportMission" class="ghost">Quick MissionProject</button>
+          <button id="exportGeojson" class="ghost small">Export GeoJSON</button>
+          <button id="exportCot" class="ghost small">Export CoT stub</button>
+          <button id="importMission" class="ghost small" type="button">Import MissionProject</button>
+          <input id="missionFile" type="file" accept="application/json" style="display: none;" />
         </div>
         <div id="appWarning" class="warning"></div>
       </section>
@@ -278,10 +287,12 @@
       const input = document.getElementById("demo-code");
       const submit = document.getElementById("demo-enter");
       const error = document.getElementById("demo-error");
+      const demoRequest = document.getElementById("demo-request");
 
       const unlock = () => {
         localStorage.setItem(STORAGE_KEY, "true");
         if (gate) gate.style.display = "none";
+        if (demoRequest) demoRequest.style.display = "none";
         if (app) app.style.display = "block";
       };
 
@@ -306,6 +317,7 @@
         }
 
         if (gate) gate.style.display = "block";
+        if (demoRequest) demoRequest.style.display = "block";
         if (app) app.style.display = "none";
 
         if (submit) submit.addEventListener("click", validate);
