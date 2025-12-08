@@ -5,134 +5,267 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ceradon UxS Architect</title>
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    #access-gate {
+      display: none;
+      max-width: 520px;
+      margin: 12vh auto;
+      padding: 2rem 2.5rem;
+      background: #fff;
+      border: 1px solid #e1e4e8;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+    }
+
+    #access-gate h1 {
+      margin-bottom: 0.25rem;
+      font-size: 1.6rem;
+    }
+
+    #access-gate p {
+      margin-top: 0;
+      color: #4a5568;
+    }
+
+    #access-gate label {
+      display: block;
+      margin: 1rem 0 0.35rem;
+      font-weight: 600;
+    }
+
+    #access-gate input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #cbd5e0;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+
+    #access-gate button {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.85rem;
+      border: none;
+      border-radius: 10px;
+      background: #111827;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    #access-gate button:hover {
+      background: #0b1220;
+    }
+
+    .error-message {
+      display: none;
+      margin-top: 0.75rem;
+      color: #b91c1c;
+      font-size: 0.95rem;
+    }
+  </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>Ceradon UxS Architect</h1>
-      <p class="subtitle">Offline-first sandbox for UxS stack design and evaluation.</p>
-    </div>
-    <div class="badge">Client-side only · Field editable catalogs</div>
-  </header>
+  <div id="access-gate">
+    <h1>Ceradon Systems — Ceradon UxS Architect Demo</h1>
+    <p>Enter your demo access code to continue.</p>
+    <label for="demo-code">Access code</label>
+    <input id="demo-code" type="password" autocomplete="off" placeholder="UXS-FLIGHT-982" />
+    <button id="demo-enter" type="button">Enter</button>
+    <div id="demo-error" class="error-message">Invalid code.</div>
+  </div>
 
-  <main class="layout">
-    <section class="panel">
+  <div id="app-root" style="display: none;">
+    <header>
+      <div>
+        <h1>Ceradon UxS Architect</h1>
+        <p class="subtitle">Offline-first sandbox for UxS stack design and evaluation.</p>
+      </div>
+      <div class="badge">Client-side only · Field editable catalogs</div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Stack Builder</h2>
+            <p class="muted">Select components, evaluate power/weight, and keep options ready for inventory mode.</p>
+          </div>
+          <div class="controls-inline">
+            <label>Domain
+              <select id="domain">
+                <option value="air" selected>Air</option>
+                <option value="ground">Ground</option>
+                <option value="maritime">Maritime</option>
+              </select>
+            </label>
+            <label>Mission role
+              <select id="missionRole"></select>
+            </label>
+            <label>EMCON
+              <select id="emcon"></select>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid two">
+          <label>Stack name
+            <input id="stackName" placeholder="Long range scout" />
+          </label>
+          <label>Frame
+            <select id="frame"></select>
+          </label>
+          <label>Motor / ESC
+            <select id="motorEsc"></select>
+          </label>
+          <label>Flight controller
+            <select id="flightController"></select>
+          </label>
+          <label>Battery
+            <select id="battery"></select>
+          </label>
+          <label>Compute
+            <select id="compute"></select>
+          </label>
+          <label>Camera
+            <select id="camera"></select>
+          </label>
+          <label>Payloads
+            <select id="payloads" multiple size="5"></select>
+          </label>
+        </div>
+
+        <div class="grid two">
+          <label>RC Receiver
+            <select id="rcReceiver"></select>
+          </label>
+          <label>RC Antenna
+            <select id="rcAntenna"></select>
+          </label>
+          <label>VTX
+            <select id="vtx"></select>
+          </label>
+          <label>VTX Antenna
+            <select id="vtxAntenna"></select>
+          </label>
+          <label>Aux radio
+            <select id="auxRadio"></select>
+          </label>
+          <label>Aux radio antenna
+            <select id="auxRadioAntenna"></select>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="refreshBtn">Evaluate stack</button>
+          <button id="resetBtn" class="ghost">Reset selections</button>
+        </div>
+        <div id="appWarning" class="warning"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Performance snapshot</h2>
+        <div class="metrics" id="metrics"></div>
+        <div class="tags" id="roles"></div>
+        <ul id="warnings" class="warnings-list"></ul>
+
+        <h3>Stack detail</h3>
+        <div id="stackCards" class="card-grid"></div>
+      </section>
+    </main>
+
+    <section class="panel wide">
       <div class="panel-header">
         <div>
-          <h2>Stack Builder</h2>
-          <p class="muted">Select components, evaluate power/weight, and keep options ready for inventory mode.</p>
+          <h2>Catalog slices</h2>
+          <p class="muted">Library entries filtered by domain. Catalog lives in <code>/web/data</code> for quick field edits.</p>
         </div>
         <div class="controls-inline">
-          <label>Domain
-            <select id="domain">
-              <option value="air" selected>Air</option>
-              <option value="ground">Ground</option>
-              <option value="maritime">Maritime</option>
-            </select>
-          </label>
-          <label>Mission role
-            <select id="missionRole"></select>
-          </label>
-          <label>EMCON
-            <select id="emcon"></select>
+          <label>Payload role filter
+            <select id="payloadRoleFilter"></select>
           </label>
         </div>
       </div>
-
-      <div class="grid two">
-        <label>Stack name
-          <input id="stackName" placeholder="Long range scout" />
-        </label>
-        <label>Frame
-          <select id="frame"></select>
-        </label>
-        <label>Motor / ESC
-          <select id="motorEsc"></select>
-        </label>
-        <label>Flight controller
-          <select id="flightController"></select>
-        </label>
-        <label>Battery
-          <select id="battery"></select>
-        </label>
-        <label>Compute
-          <select id="compute"></select>
-        </label>
-        <label>Camera
-          <select id="camera"></select>
-        </label>
-        <label>Payloads
-          <select id="payloads" multiple size="5"></select>
-        </label>
+      <div class="responsive-grid">
+        <div>
+          <h4>Payload library</h4>
+          <ul id="payloadLibrary" class="list"></ul>
+        </div>
+        <div>
+          <h4>Frames & mesh nodes</h4>
+          <ul id="library" class="list"></ul>
+        </div>
       </div>
-
-      <div class="grid two">
-        <label>RC Receiver
-          <select id="rcReceiver"></select>
-        </label>
-        <label>RC Antenna
-          <select id="rcAntenna"></select>
-        </label>
-        <label>VTX
-          <select id="vtx"></select>
-        </label>
-        <label>VTX Antenna
-          <select id="vtxAntenna"></select>
-        </label>
-        <label>Aux radio
-          <select id="auxRadio"></select>
-        </label>
-        <label>Aux radio antenna
-          <select id="auxRadioAntenna"></select>
-        </label>
-      </div>
-
-      <div class="actions">
-        <button id="refreshBtn">Evaluate stack</button>
-        <button id="resetBtn" class="ghost">Reset selections</button>
-      </div>
-      <div id="appWarning" class="warning"></div>
     </section>
 
-    <section class="panel">
-      <h2>Performance snapshot</h2>
-      <div class="metrics" id="metrics"></div>
-      <div class="tags" id="roles"></div>
-      <ul id="warnings" class="warnings-list"></ul>
-
-      <h3>Stack detail</h3>
-      <div id="stackCards" class="card-grid"></div>
-    </section>
-  </main>
-
-  <section class="panel wide">
-    <div class="panel-header">
-      <div>
-        <h2>Catalog slices</h2>
-        <p class="muted">Library entries filtered by domain. Catalog lives in <code>/web/data</code> for quick field edits.</p>
-      </div>
-      <div class="controls-inline">
-        <label>Payload role filter
-          <select id="payloadRoleFilter"></select>
-        </label>
-      </div>
-    </div>
-    <div class="responsive-grid">
-      <div>
-        <h4>Payload library</h4>
-        <ul id="payloadLibrary" class="list"></ul>
-      </div>
-      <div>
-        <h4>Frames & mesh nodes</h4>
-        <ul id="library" class="list"></ul>
-      </div>
-    </div>
-  </section>
-
-  <footer>
-    <p class="muted">No network calls beyond local JSON. Future inventory mode can bind these selectors to stored manifests without backend changes.</p>
-  </footer>
+    <footer>
+      <p class="muted">No network calls beyond local JSON. Future inventory mode can bind these selectors to stored manifests without backend changes.</p>
+    </footer>
+  </div>
 
   <script type="module" src="dist/ui.js"></script>
+  <script>
+    (() => {
+      const ACCESS_CODE = "UXS-FLIGHT-982";
+      const STORAGE_KEY = "ceradonDemoAuthorized";
+
+      const gate = document.getElementById("access-gate");
+      const app = document.getElementById("app-root");
+      const input = document.getElementById("demo-code");
+      const submit = document.getElementById("demo-enter");
+      const error = document.getElementById("demo-error");
+
+      const unlock = () => {
+        localStorage.setItem(STORAGE_KEY, "true");
+        if (gate) gate.style.display = "none";
+        if (app) app.style.display = "block";
+      };
+
+      const showError = () => {
+        if (error) error.style.display = "block";
+      };
+
+      const validate = () => {
+        if (!input) return;
+        const value = input.value.trim();
+        if (value === ACCESS_CODE) {
+          unlock();
+        } else {
+          showError();
+        }
+      };
+
+      const bootstrap = () => {
+        if (localStorage.getItem(STORAGE_KEY) === "true") {
+          unlock();
+          return;
+        }
+
+        if (gate) gate.style.display = "block";
+        if (app) app.style.display = "none";
+
+        if (submit) submit.addEventListener("click", validate);
+        if (input) {
+          input.addEventListener("keypress", (event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              validate();
+            }
+          });
+        }
+      };
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bootstrap);
+      } else {
+        bootstrap();
+      }
+    })();
+  </script>
 </body>
 </html>
