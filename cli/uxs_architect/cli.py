@@ -187,7 +187,132 @@ def mission_project_to_cot(project: Dict[str, Any]) -> Dict[str, Any]:
     return {"events": events}
 
 
+
+def _normalize_nodes(bundle: dict) -> list[dict]:
+    nodes: list[dict] = []
+    for node in bundle.get("nodes", []):
+        weight_grams = node.get("weight_grams")
+        if weight_grams is None and node.get("mass_kg") is not None:
+            weight_grams = float(node["mass_kg"]) * 1000
+        power_w = node.get("power_draw_w") or node.get("power_w") or 0.0
+        roles = node.get("role") or node.get("role_tags") or []
+        nodes.append(
+            {
+                "id": node.get("id") or node.get("node_id") or node.get("uuid") or node.get("name"),
+                "name": node.get("name", "Imported node"),
+                "weight_grams": weight_grams or 0.0,
+                "mass_kg": (weight_grams or 0.0) / 1000,
+                "power_draw_w": power_w,
+                "role_tags": roles,
+                "rf_band_ghz": node.get("rf_band_ghz"),
+                "origin_tool": node.get("origin_tool", "node"),
+                "notes": node.get("notes", "Imported from MissionProject"),
+            }
+        )
+    return [n for n in nodes if n.get("id")]
+
+
+def _extend_catalog_with_nodes(catalog: dict, nodes: list[dict]) -> dict:
+    if not nodes:
+        return catalog
+    augmented = {**catalog}
+    augmented.setdefault("payloads", [])
+    augmented.setdefault("compute", [])
+    augmented.setdefault("radios", [])
+    for node in nodes:
+        base_id = str(node["id"])
+        mass_kg = round(float(node.get("mass_kg", 0.0)), 3)
+        power_w = round(float(node.get("power_draw_w", 0.0)), 2)
+        roles = node.get("role_tags") or []
+        notes = node.get("notes", "Imported node component")
+        augmented["payloads"].append(
+            {
+                "id": f"{base_id}-payload",
+                "name": f"{node['name']} (payload)",
+                "mass_kg": mass_kg,
+                "power_w": power_w,
+                "role_tags": roles,
+                "notes": notes,
+            }
+        )
+        augmented["compute"].append(
+            {
+                "id": f"{base_id}-compute",
+                "name": f"{node['name']} (compute)",
+                "power_w": power_w or 5.0,
+                "mass_kg": mass_kg,
+                "ai_tops": node.get("ai_tops", 0),
+                "role_tags": roles,
+                "notes": notes,
+            }
+        )
+        augmented["radios"].append(
+            {
+                "id": f"{base_id}-radio",
+                "name": f"{node['name']} (radio)",
+                "power_w": power_w or 5.0,
+                "mass_kg": mass_kg,
+                "range_km": node.get("range_km", 0),
+                "rf_band_ghz": node.get("rf_band_ghz"),
+                "role_tags": roles,
+                "notes": notes,
+            }
+        )
+    return augmented
+
+
+def build_mission_platform(
+    selection: ComponentSelection,
+    result: DesignResult,
+    environment: Environment,
+    intended_roles: list[str] | None = None,
+    platform_id: str | None = None,
+    platform_name: str | None = None,
+    nodes: list[dict] | None = None,
+) -> dict:
+    platform_entry = {
+        "id": platform_id or f"plt-{selection.frame}",
+        "name": platform_name or "UxS platform",
+        "origin_tool": "uxs",
+        "frame_type": selection.frame,
+        "auw_kg": result.mass_kg,
+        "nominal_endurance_min": result.estimated_endurance_min,
+        "adjusted_endurance_min": result.adjusted_endurance_min,
+        "thrust_to_weight": result.thrust_to_weight,
+        "adjusted_thrust_to_weight": result.adjusted_thrust_to_weight,
+        "mounted_node_ids": list(selection.mounted_nodes),
+        "payload_ids": list(selection.payloads),
+        "intended_roles": intended_roles or result.role_tags,
+        "environment": {
+            "altitude_band": environment.altitude_band,
+            "temperature_band": environment.temperature_band,
+        },
+    }
+    environment_entry = {
+        "id": "env-local",
+        "altitude_band": environment.altitude_band,
+        "temperature_band": environment.temperature_band,
+    }
+    bundle = {
+        "version": "1.0",
+        "origin_tool": "uxs",
+        "mission": {"id": "mission-local", "name": "Mission export", "origin_tool": "mission"},
+        "environment": [environment_entry],
+        "platforms": [platform_entry],
+    }
+    if nodes:
+        bundle["nodes"] = nodes
+    return bundle
+
+
 def handle_evaluate(catalog: Dict[str, Any], args: argparse.Namespace) -> None:
+    imported_nodes: List[Dict[str, Any]] = []
+    if args.mission_project:
+        mission_data = load_mission_project(args.mission_project)
+        bundle = mission_data.get("mission_project") or mission_data
+        imported_nodes = _normalize_nodes(bundle)
+        catalog = _extend_catalog_with_nodes(catalog, imported_nodes)
+
     selection = ComponentSelection(
         frame=args.frame,
         propulsion=args.propulsion,
@@ -209,6 +334,17 @@ def handle_evaluate(catalog: Dict[str, Any], args: argparse.Namespace) -> None:
     result = evaluate_design(catalog, selection, environment=environment, constraints=constraints)
     if args.json:
         print(json.dumps(result, cls=CompactJSONEncoder, indent=2))
+        if args.mission_out:
+            bundle = build_mission_platform(
+                selection,
+                result,
+                environment,
+                intended_roles=args.intended_role or [],
+                platform_id=args.platform_id,
+                platform_name=args.platform_name,
+                nodes=imported_nodes,
+            )
+            Path(args.mission_out).write_text(json.dumps(bundle, indent=2), encoding="utf-8")
         return
 
     print(f"Frame: {selection.frame}\nPropulsion: {selection.propulsion}\nBattery: {selection.battery}")
@@ -231,6 +367,18 @@ def handle_evaluate(catalog: Dict[str, Any], args: argparse.Namespace) -> None:
         for warn in result.warnings:
             print(f"- {warn}")
 
+    if args.mission_out:
+        bundle = build_mission_platform(
+            selection,
+            result,
+            environment,
+            intended_roles=args.intended_role or [],
+            platform_id=args.platform_id,
+            platform_name=args.platform_name,
+            nodes=imported_nodes,
+        )
+        Path(args.mission_out).write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+        print(f"MissionProject written to {args.mission_out}")
 
 def handle_mission(_: Dict[str, Any], args: argparse.Namespace) -> None:
     if args.whitefrost:
@@ -279,6 +427,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--radio", required=True)
     eval_parser.add_argument("--payload", dest="payloads", action="append")
     eval_parser.add_argument("--node", dest="nodes", action="append", help="Mounted node IDs (for traceability)")
+    eval_parser.add_argument("--mission-project", help="MissionProject JSON to import nodes/components")
     eval_parser.add_argument(
         "--altitude-band",
         choices=list(ALTITUDE_BANDS.keys()),
@@ -294,6 +443,10 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--min-twr", type=float, help="Minimum acceptable thrust-to-weight (adjusted)")
     eval_parser.add_argument("--min-endurance", type=float, help="Minimum environment-adjusted endurance (minutes)")
     eval_parser.add_argument("--max-auw", type=float, help="Maximum AUW (kg)")
+    eval_parser.add_argument("--mission-out", help="Write MissionProject bundle with this platform")
+    eval_parser.add_argument("--platform-id", help="Platform ID for MissionProject export")
+    eval_parser.add_argument("--platform-name", help="Platform name for MissionProject export")
+    eval_parser.add_argument("--intended-role", action="append", help="Intended mission role tag for export")
     eval_parser.add_argument("--json", action="store_true", help="Emit JSON instead of text")
     eval_parser.set_defaults(func=handle_evaluate)
 
