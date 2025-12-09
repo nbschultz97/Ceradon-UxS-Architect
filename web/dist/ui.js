@@ -68,6 +68,7 @@ const selectors = {
 };
 
 let catalog;
+let catalogWithNodes;
 let selection = {};
 let nodeLibrary = [];
 let savedPlatforms = [];
@@ -78,6 +79,81 @@ let environment = { altitude: 'sea_level', temperature: 'standard' };
 let constraintPrefs = { minTwr: null, minEndurance: null, maxAuw: null };
 let lastResult = null;
 let lastStack = null;
+
+
+function deriveNodeComponents(nodes = []) {
+  const payloads = [];
+  const compute = [];
+  const radios = [];
+  nodes.forEach((node) => {
+    const baseId = node.id;
+    const weight = node.weight_grams || 0;
+    const power = node.power_draw_typical_w || node.power_draw_w || 0;
+    const roles = node.role_tags || node.role || [];
+    const name = node.name || 'Imported node';
+    payloads.push({
+      id: `${baseId}-payload`,
+      name: `${name} (payload)`,
+      category: 'payload',
+      subtype: 'sensor_pod',
+      domain: 'any',
+      weight_grams: weight,
+      cost_usd: node.cost_usd || 0,
+      notes: node.notes || 'Imported from MissionProject',
+      payload_class: 'sensor_pod',
+      power_draw_typical_w: power,
+      role_tags: roles,
+      mount_pattern: 'quick_plate',
+      max_payload_mass_grams: null
+    });
+    compute.push({
+      id: `${baseId}-compute`,
+      name: `${name} (compute)`,
+      category: 'compute',
+      subtype: 'imported_node',
+      domain: 'any',
+      weight_grams: weight,
+      cost_usd: node.cost_usd || 0,
+      notes: node.notes || 'Imported from MissionProject',
+      compute_class: 'other',
+      power_draw_idle_w: power * 0.6,
+      power_draw_typical_w: power || 5,
+      power_draw_max_w: power || 5,
+      ports: { usb: 2, m2: 0, gpio: 20, camera: 1 },
+      role_tags: roles
+    });
+    radios.push({
+      id: `${baseId}-radio`,
+      name: `${name} (radio)`,
+      category: 'aux_radio',
+      subtype: 'data_link',
+      domain: 'any',
+      weight_grams: weight,
+      cost_usd: node.cost_usd || 0,
+      notes: node.notes || 'Imported from MissionProject',
+      radio_class: 'data_link',
+      rf_band_ghz: node.rf_band_ghz,
+      max_eirp_dbm: 24,
+      range_class: 'medium',
+      duty_cycle_profile: 'continuous',
+      voltage_input_min_v: 10,
+      voltage_input_max_v: 24,
+      role_tags: roles
+    });
+  });
+  return { payloads, compute, radios };
+}
+
+function refreshCatalogWithNodes() {
+  if (!catalog) return;
+  const derived = deriveNodeComponents(nodeLibrary);
+  catalogWithNodes = {
+    ...catalog,
+    payloads: [...catalog.payloads, ...derived.payloads],
+    compute: [...catalog.compute, ...derived.compute],
+    auxRadios: [...catalog.auxRadios, ...derived.radios]
+  };
+}
 
 function loadPersistedState() {
   const fallback = {
@@ -101,6 +177,10 @@ function loadPersistedState() {
   constraintPrefs = state.constraints || constraintPrefs;
 }
 
+function getCatalog() {
+  return catalogWithNodes || catalog;
+}
+
 function persistAppState() {
   persistState(STORAGE_KEY, {
     selection,
@@ -117,7 +197,7 @@ function persistAppState() {
 function ensureSelection() {
   const domain = selection.domain || selectors.domain.value;
   selectors.domain.value = domain;
-  if (!selection.frame) selection = { ...selection, ...defaultSelections(catalog, domain) };
+  if (!selection.frame) selection = { ...selection, ...defaultSelections(getCatalog(), domain) };
   selection = { ...selection, nodePayloads: selection.nodePayloads || [], domain };
 }
 
@@ -140,7 +220,8 @@ function hydrateConstraintInputs() {
 function bindPayloadFilter() {
   const filterSelect = document.querySelector('#payloadRoleFilter');
   const roles = new Set();
-  catalog.payloads.forEach((p) => (p.role_tags || []).forEach((r) => roles.add(r)));
+  const workingCatalog = getCatalog();
+  workingCatalog.payloads.forEach((p) => (p.role_tags || []).forEach((r) => roles.add(r)));
   setOptions(filterSelect, Array.from(roles).map((r) => ({ id: r, name: r })), (i) => i.name);
   filterSelect.addEventListener('change', () => renderPayloadLibrary(filterSelect.value));
   filterSelect.value = filterSelect.options[0]?.value || '';
@@ -150,7 +231,8 @@ function bindPayloadFilter() {
 function renderPayloadLibrary(role) {
   const list = document.querySelector('#payloadLibrary');
   list.innerHTML = '';
-  const payloads = role ? filterByRoleTags(catalog.payloads, role) : catalog.payloads;
+  const workingCatalog = getCatalog();
+  const payloads = role ? filterByRoleTags(workingCatalog.payloads, role) : workingCatalog.payloads;
   payloads.slice(0, 40).forEach((p) => {
     const li = document.createElement('li');
     li.innerHTML = `<div class="item-title">${p.name}</div>
@@ -191,17 +273,18 @@ function renderNodeLibrary() {
 }
 
 function renderSelectionOptions(domain) {
-  const frameOptions = filterByDomain(catalog.frames, domain);
-  const batteryOptions = catalog.batteries;
-  const motorOptions = filterByDomain(catalog.motorsEsc, domain);
-  const fcOptions = filterByDomain(catalog.flightControllers, domain);
-  const vtxOptions = catalog.vtx;
-  const rcOptions = catalog.rcReceivers;
-  const antennaOptions = catalog.antennas;
-  const auxOptions = filterByDomain(catalog.auxRadios, domain);
-  const camOptions = filterByDomain(catalog.cameras, domain);
-  const computeOptions = catalog.compute;
-  const payloadOptions = filterByDomain(catalog.payloads, domain);
+  const workingCatalog = getCatalog();
+  const frameOptions = filterByDomain(workingCatalog.frames, domain);
+  const batteryOptions = workingCatalog.batteries;
+  const motorOptions = filterByDomain(workingCatalog.motorsEsc, domain);
+  const fcOptions = filterByDomain(workingCatalog.flightControllers, domain);
+  const vtxOptions = workingCatalog.vtx;
+  const rcOptions = workingCatalog.rcReceivers;
+  const antennaOptions = workingCatalog.antennas;
+  const auxOptions = filterByDomain(workingCatalog.auxRadios, domain);
+  const camOptions = filterByDomain(workingCatalog.cameras, domain);
+  const computeOptions = workingCatalog.compute;
+  const payloadOptions = filterByDomain(workingCatalog.payloads, domain);
 
   setOptions(selectors.frame, frameOptions, (i) => `${i.name} (${i.form_factor})`);
   setOptions(selectors.motorEsc, motorOptions, (i) => `${i.name} (${i.motor_count}x @ ${i.motor_kv}KV)`);
@@ -271,16 +354,28 @@ function renderMetrics(stack, result) {
   metrics.innerHTML = '';
   const altitude = resolveAltitude(result.environment.altitude);
   const temperature = resolveTemperature(result.environment.temperature);
+  const auwLimit = constraintPrefs.maxAuw;
+  const auwOk = !auwLimit || result.totalWeight <= auwLimit * 1000;
+  const enduranceOk = !constraintPrefs.minEndurance || result.adjustedEnduranceMinutes >= constraintPrefs.minEndurance;
+  const twrOk = !constraintPrefs.minTwr || result.adjustedThrustToWeight >= constraintPrefs.minTwr;
+  const statusPill = (ok) => `<span class="status ${ok ? 'ok' : 'warn'}">${ok ? 'PASS' : 'CHECK'}</span>`;
   const rows = [
     ['All-up weight', formatWeight(result.totalWeight)],
     ['Payload mass', formatWeight(result.payloadMass)],
     ['Payload allowance', formatWeight((result.payloadCapacity || 0) - result.payloadMass)],
-    ['Thrust-to-weight', `${result.thrustToWeight.toFixed(2)} (adj ${result.adjustedThrustToWeight.toFixed(2)})`],
+    [
+      'Thrust-to-weight',
+      `${result.thrustToWeight.toFixed(2)} (adj ${result.adjustedThrustToWeight.toFixed(2)}) ${statusPill(twrOk)}`
+    ],
     ['Power budget', formatPower(result.powerBudget)],
     ['Nominal endurance', `${result.enduranceMinutes.toFixed(1)} min`],
-    ['Env-adjusted endurance', `${result.adjustedEnduranceMinutes.toFixed(1)} min @ ${altitude.name} / ${temperature.name}`],
+    [
+      'Env-adjusted endurance',
+      `${result.adjustedEnduranceMinutes.toFixed(1)} min @ ${altitude.name} / ${temperature.name} ${statusPill(enduranceOk)}`
+    ],
     ['Est. cost', formatCurrency(result.totalCost)]
   ];
+  if (auwLimit) rows.unshift(['AUW limit', `${formatWeight(auwLimit * 1000)} ${statusPill(auwOk)}`]);
   rows.forEach(([label, value]) => {
     const div = document.createElement('div');
     div.className = 'metric';
@@ -341,8 +436,9 @@ function renderStackCards(stack) {
 function renderLibrary(domain) {
   const libraryList = document.querySelector('#library');
   libraryList.innerHTML = '';
-  const frames = filterByDomain(catalog.frames, domain).slice(0, 8);
-  const radios = filterByDomain(catalog.auxRadios, domain).slice(0, 6);
+  const workingCatalog = getCatalog();
+  const frames = filterByDomain(workingCatalog.frames, domain).slice(0, 8);
+  const radios = filterByDomain(workingCatalog.auxRadios, domain).slice(0, 6);
   [...frames, ...radios].forEach((item) => {
     const li = document.createElement('li');
     li.innerHTML = `<div class="item-title">${item.name}</div><div class="item-meta">${formatWeight(item.weight_grams)} · ${formatCurrency(item.cost_usd)}</div><div class="item-notes">${item.notes}</div>`;
@@ -396,7 +492,7 @@ function sanitizeLocation(loc) {
 
 function missionPlatformToSnapshot(p) {
   const domain = p.domain || selection.domain || 'air';
-  const defaults = catalog ? defaultSelections(catalog, domain) : {};
+  const defaults = getCatalog() ? defaultSelections(getCatalog(), domain) : {};
   const env = p.environment || {};
   return {
     id: p.id || p.platform_id || `platform-${Date.now()}`,
@@ -475,12 +571,13 @@ function applyMissionProject(project) {
 function collectRfBands(entry) {
   const rfSet = new Set(entry.rf_bands_ghz || []);
   const sel = entry.selection || {};
-  const rc = findById(catalog.rcReceivers, sel.rcReceiver || sel.rc_receiver);
-  const vtx = findById(catalog.vtx, sel.vtx);
-  const aux = findById(catalog.auxRadios, sel.auxRadio || sel.aux_radio);
-  const rcAnt = findById(catalog.antennas, sel.rcAntenna || sel.rc_antenna);
-  const vtxAnt = findById(catalog.antennas, sel.vtxAntenna || sel.vtx_antenna);
-  const auxAnt = findById(catalog.antennas, sel.auxRadioAntenna || sel.aux_radio_antenna);
+  const workingCatalog = getCatalog();
+  const rc = findById(workingCatalog.rcReceivers, sel.rcReceiver || sel.rc_receiver);
+  const vtx = findById(workingCatalog.vtx, sel.vtx);
+  const aux = findById(workingCatalog.auxRadios, sel.auxRadio || sel.aux_radio);
+  const rcAnt = findById(workingCatalog.antennas, sel.rcAntenna || sel.rc_antenna);
+  const vtxAnt = findById(workingCatalog.antennas, sel.vtxAntenna || sel.vtx_antenna);
+  const auxAnt = findById(workingCatalog.antennas, sel.auxRadioAntenna || sel.aux_radio_antenna);
   [rc, vtx, aux, rcAnt, vtxAnt, auxAnt]
     .filter((item) => item && Number.isFinite(item.rf_band_ghz))
     .forEach((item) => rfSet.add(Number(item.rf_band_ghz)));
@@ -505,7 +602,7 @@ function buildMissionProjectPayload() {
 
   const platforms = savedPlatforms.map((p) => {
     const rfBands = collectRfBands(p);
-    const battery = p.selection?.battery ? findById(catalog.batteries, p.selection.battery) : null;
+    const battery = p.selection?.battery ? findById(workingCatalog.batteries, p.selection.battery) : null;
     const batteryWh = battery ? (battery.capacity_mah * battery.voltage_nominal) / 1000 : undefined;
     return {
       id: p.id,
@@ -719,6 +816,7 @@ async function handleNodeImport(event) {
     const parsed = parseNodeDesigns(json);
     if (!parsed.length) throw new Error('No recognizable node designs in file');
     nodeLibrary = parsed;
+    refreshCatalogWithNodes();
     renderNodeOptions();
     renderNodeLibrary();
     persistAppState();
@@ -769,7 +867,8 @@ function exportPlatformJson() {
 function evaluateAndRender() {
   readSelectionFromDom();
   const domain = selectors.domain.value;
-  const stack = buildStack(catalog, selection, selectors.missionRole.value, selectors.emcon.value, domain, nodeLibrary, environment);
+  const workingCatalog = getCatalog();
+  const stack = buildStack(workingCatalog, selection, selectors.missionRole.value, selectors.emcon.value, domain, nodeLibrary, environment);
   const result = evaluateStack(stack, environment, constraintPrefs);
   lastResult = result;
   lastStack = stack;
@@ -787,7 +886,7 @@ function wireEvents() {
   document.querySelector('#refreshBtn').addEventListener('click', evaluateAndRender);
   document.querySelector('#resetBtn').addEventListener('click', () => {
     const domain = selectors.domain.value;
-    selection = defaultSelections(catalog, domain);
+    selection = defaultSelections(getCatalog(), domain);
     selection.domain = domain;
     selection.nodePayloads = [];
     environment = { altitude: 'sea_level', temperature: 'standard' };
@@ -812,6 +911,7 @@ function wireEvents() {
 async function main() {
   loadPersistedState();
   catalog = await loadCatalog();
+  refreshCatalogWithNodes();
   populateStaticControls();
   ensureSelection();
   const domain = selectors.domain.value;

@@ -35,7 +35,13 @@ Open https://nbschultz97.github.io/Ceradon-UxS-Architect/ (or load `web/index.ht
 
 ### Importing Node Architect designs
 - Use **Import Node designs** in the payloads section to load the JSON emitted by Node Architect. Imported nodes appear in the library, can be mounted as payloads, and their IDs are preserved in exports for traceability.
+- **Import MissionProject** now ingests the `nodes[]` array and exposes those entries as selectable compute/radio/payload options in the builder.
 - Saved platforms and the last environment selection are cached in `localStorage` so offline tweaks survive refreshes.
+
+### WHITEFROST presets and mission export
+- The catalog includes 3D-printed WHITEFROST airframes, cold-weather propulsion, and UGV drive options tagged for recon/relay/training/decoy roles.
+- **WHITEFROST Demo** loads recon and mesh relay quads that mount imported nodes; you can export them directly as MissionProject bundles from the UI or CLI (`--mission-out`).
+- The CLI `evaluate` subcommand accepts `--mission-project` to pull in nodes as components and `--mission-out` to emit a MissionProject bundle with platform stats (AUW, endurance, thrust-to-weight, environment bands).
 
 ### Environment effects
 - Select an altitude band and temperature band to model thinner air (reduced thrust, higher hover power) and cold-soaked packs (reduced available Wh). The UI and CLI both surface nominal and environment-adjusted endurance plus a second thrust-to-weight value.

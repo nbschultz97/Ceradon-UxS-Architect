@@ -8,7 +8,11 @@
       "max_payload_kg": 1.8,
       "max_takeoff_kg": 4.8,
       "drag_cdA": 0.45,
-      "role_tags": ["recon", "relay", "loiter"],
+      "role_tags": [
+        "recon",
+        "relay",
+        "loiter"
+      ],
       "notes": "Foldable quad optimized for low acoustic/thermal signature."
     },
     {
@@ -19,7 +23,11 @@
       "max_payload_kg": 3.0,
       "max_takeoff_kg": 9.2,
       "drag_cdA": 0.68,
-      "role_tags": ["recon", "relay", "strike-capable"],
+      "role_tags": [
+        "recon",
+        "relay",
+        "strike-capable"
+      ],
       "notes": "Tilt-rotor wing with generous fuselage volume for sensors."
     },
     {
@@ -30,8 +38,57 @@
       "max_payload_kg": 4.0,
       "max_takeoff_kg": 12.0,
       "drag_cdA": 0.0,
-      "role_tags": ["recon", "decoy", "strike-capable"],
+      "role_tags": [
+        "recon",
+        "decoy",
+        "strike-capable"
+      ],
       "notes": "6x6 rover with sealed bay for wet-weather comms relay."
+    },
+    {
+      "id": "whitefrost_printed_quad",
+      "name": "WHITEFROST Printed Quad",
+      "type": "multirotor",
+      "empty_mass_kg": 2.2,
+      "max_payload_kg": 2.1,
+      "max_takeoff_kg": 4.6,
+      "drag_cdA": 0.42,
+      "role_tags": [
+        "recon",
+        "relay",
+        "training"
+      ],
+      "notes": "3D-printed arms, insulated ESC pockets, sized for cold-weather packs."
+    },
+    {
+      "id": "whitefrost_compact_vtol",
+      "name": "WHITEFROST Compact VTOL",
+      "type": "vtol",
+      "empty_mass_kg": 5.0,
+      "max_payload_kg": 2.5,
+      "max_takeoff_kg": 8.0,
+      "drag_cdA": 0.55,
+      "role_tags": [
+        "recon",
+        "relay",
+        "training"
+      ],
+      "notes": "Printed center wing box with detachable booms for field repairs."
+    },
+    {
+      "id": "whitefrost_tracked_ugv",
+      "name": "WHITEFROST Tracked UGV",
+      "type": "ground",
+      "empty_mass_kg": 7.4,
+      "max_payload_kg": 5.2,
+      "max_takeoff_kg": 13.0,
+      "drag_cdA": 0.0,
+      "role_tags": [
+        "relay",
+        "decoy",
+        "training"
+      ],
+      "notes": "Simple tracked chassis with cold-soak heaters and radio mast mounts."
     }
   ],
   "propulsion": [
@@ -41,7 +98,10 @@
       "thrust_kg": 7.2,
       "hover_power_w": 420,
       "mass_kg": 0.9,
-      "compatible_frames": ["scout_quad", "skyeye_vtol"],
+      "compatible_frames": [
+        "scout_quad",
+        "skyeye_vtol"
+      ],
       "notes": "Efficient 17\" props tuned for hover endurance."
     },
     {
@@ -50,7 +110,9 @@
       "thrust_kg": 12.0,
       "hover_power_w": 760,
       "mass_kg": 1.5,
-      "compatible_frames": ["skyeye_vtol"],
+      "compatible_frames": [
+        "skyeye_vtol"
+      ],
       "notes": "High static thrust for vertical recoveries with payloads."
     },
     {
@@ -59,8 +121,45 @@
       "thrust_kg": 14.0,
       "hover_power_w": 180,
       "mass_kg": 1.2,
-      "compatible_frames": ["prowler_ugv"],
+      "compatible_frames": [
+        "prowler_ugv"
+      ],
       "notes": "Quiet in-hub motors with regenerative braking."
+    },
+    {
+      "id": "whitefrost_quad_thrusters",
+      "name": "WHITEFROST Quad Thrusters",
+      "thrust_kg": 9.4,
+      "hover_power_w": 460,
+      "mass_kg": 0.95,
+      "compatible_frames": [
+        "whitefrost_printed_quad",
+        "scout_quad"
+      ],
+      "notes": "Cold-altitude prop/motor set tuned for printed arm stiffness."
+    },
+    {
+      "id": "whitefrost_vtol_pack",
+      "name": "WHITEFROST VTOL Propulsion",
+      "thrust_kg": 11.0,
+      "hover_power_w": 710,
+      "mass_kg": 1.4,
+      "compatible_frames": [
+        "whitefrost_compact_vtol",
+        "skyeye_vtol"
+      ],
+      "notes": "VTOL boom set with de-icing spray coating."
+    },
+    {
+      "id": "whitefrost_tracked_drive",
+      "name": "WHITEFROST Tracked Drive",
+      "thrust_kg": 16.0,
+      "hover_power_w": 190,
+      "mass_kg": 1.6,
+      "compatible_frames": [
+        "whitefrost_tracked_ugv"
+      ],
+      "notes": "Low-temperature grease and heater strip on gearboxes."
     }
   ],
   "batteries": [
@@ -90,6 +189,24 @@
       "continuous_discharge_w": 900,
       "chemistry": "Li-Ion",
       "notes": "Ruggedized brick with tool-less swap bay."
+    },
+    {
+      "id": "whitefrost_cold_soak_pack",
+      "name": "WHITEFROST Cold-Soak Pack",
+      "capacity_wh": 560,
+      "mass_kg": 1.6,
+      "continuous_discharge_w": 1200,
+      "chemistry": "Li-Ion",
+      "notes": "Foam-wrapped pack with heater strip for -10C sorties."
+    },
+    {
+      "id": "whitefrost_long_endurance",
+      "name": "WHITEFROST Long Endurance",
+      "capacity_wh": 640,
+      "mass_kg": 1.9,
+      "continuous_discharge_w": 1100,
+      "chemistry": "Li-Ion",
+      "notes": "High altitude tuned energy brick for relay loitering."
     }
   ],
   "compute": [
@@ -150,7 +267,10 @@
       "name": "EO/IR Ball",
       "mass_kg": 0.8,
       "power_w": 22,
-      "role_tags": ["recon", "strike-capable"],
+      "role_tags": [
+        "recon",
+        "strike-capable"
+      ],
       "notes": "Gimballed EO/IR turret with ISR-grade stabilization."
     },
     {
@@ -158,7 +278,10 @@
       "name": "Relay Node",
       "mass_kg": 0.6,
       "power_w": 10,
-      "role_tags": ["relay", "loiter"],
+      "role_tags": [
+        "relay",
+        "loiter"
+      ],
       "notes": "Dual-radio payload for airborne mesh backhaul."
     },
     {
@@ -166,7 +289,10 @@
       "name": "Decoy Emitter",
       "mass_kg": 0.7,
       "power_w": 40,
-      "role_tags": ["decoy", "loiter"],
+      "role_tags": [
+        "decoy",
+        "loiter"
+      ],
       "notes": "Programmable signature generator with EMCON presets."
     },
     {
@@ -174,8 +300,22 @@
       "name": "CSI Pose Array",
       "mass_kg": 0.9,
       "power_w": 28,
-      "role_tags": ["recon", "pose-detection"],
+      "role_tags": [
+        "recon",
+        "pose-detection"
+      ],
       "notes": "Phase-synced antenna cluster sized for through-wall pose mapping."
+    },
+    {
+      "id": "whitefrost_relay_core",
+      "name": "WHITEFROST Relay Core",
+      "mass_kg": 0.55,
+      "power_w": 14,
+      "role_tags": [
+        "relay",
+        "training"
+      ],
+      "notes": "Imported mesh relay node hardened for cold-weather flights."
     }
   ]
 }
