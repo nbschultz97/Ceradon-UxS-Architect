@@ -147,6 +147,14 @@ button.ghost {
 .item-meta { color: var(--muted); font-size: 13px; margin: 4px 0; }
 .item-notes { color: var(--muted); font-size: 13px; }
 
+.outputs { overflow-x: auto; }
+.outputs-table { width: 100%; border-collapse: collapse; }
+.outputs-table th, .outputs-table td { padding: 10px; border-bottom: 1px solid var(--border); }
+.outputs-table th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+.outputs-table tr:hover { background: #0f1520; }
+.outputs-table td { vertical-align: middle; }
+.outputs-table button { float: right; }
+
 .controls-inline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .controls-inline label { margin: 0; }
 

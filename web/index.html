@@ -72,8 +72,8 @@
 </head>
 <body>
   <div id="access-gate">
-    <h1>Ceradon Systems — Ceradon UxS Architect Demo</h1>
-    <p>Enter your demo access code to continue.</p>
+    <h1>Ceradon UxS Architect access</h1>
+    <p>Enter your access code to open Ceradon UxS Architect in the Ceradon Architect planning suite.</p>
     <label for="demo-code">Access code</label>
     <input id="demo-code" type="password" autocomplete="off" placeholder="Enter access code" />
     <button id="demo-enter" type="button">Enter</button>
@@ -161,8 +161,6 @@
             <select id="camera"></select>
           </label>
           <h3 class="step-title">Step 2: Choose node(s) / payloads</h3>
-            <select id="camera"></select>
-          </label>
           <label>Payloads
             <select id="payloads" multiple size="5"></select>
           </label>
@@ -218,16 +216,18 @@
           <button id="refreshBtn">Evaluate stack</button>
           <button id="resetBtn" class="ghost">Reset selections</button>
           <button id="savePlatform" class="ghost">Save platform</button>
+          <button id="loadDemo" class="ghost">Load demo platform</button>
           <button id="loadWhitefrost" class="ghost">WHITEFROST Demo</button>
         </div>
 
         <div class="actions wrap">
-          <button id="exportPlatforms" class="ghost">Export MissionProject</button>
-          <button id="exportMission" class="ghost">Quick MissionProject</button>
-          <button id="exportGeojson" class="ghost small">Export GeoJSON</button>
-          <button id="exportCot" class="ghost small">Export CoT stub</button>
           <button id="importMission" class="ghost small" type="button">Import MissionProject</button>
           <input id="missionFile" type="file" accept="application/json" style="display: none;" />
+          <button id="exportPlatforms" class="ghost">Export MissionProject JSON</button>
+          <button id="exportPlatformsStandalone" class="ghost">Export platforms only</button>
+          <button id="exportMission" class="ghost small">Quick MissionProject</button>
+          <button id="exportGeojson" class="ghost small">Export GeoJSON</button>
+          <button id="exportCot" class="ghost small">Export CoT stub</button>
         </div>
         <div id="appWarning" class="warning"></div>
       </section>
@@ -246,7 +246,7 @@
     <section class="panel wide">
       <div class="panel-header">
         <div>
-          <h2>Catalog slices</h2>
+          <h2>Catalog slices & Node Architect inputs</h2>
           <p class="muted">Library entries filtered by domain. Catalog lives in <code>/web/data</code> for quick field edits.</p>
         </div>
         <div class="controls-inline">
@@ -265,13 +265,27 @@
           <ul id="library" class="list"></ul>
         </div>
         <div>
-          <h4>Imported node designs</h4>
+          <h4>Available nodes from Node Architect</h4>
           <ul id="nodeLibrary" class="list"></ul>
         </div>
         <div>
           <h4>Saved platforms</h4>
           <ul id="savedPlatforms" class="list"></ul>
         </div>
+      </div>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-header">
+        <div>
+          <h2>Outputs</h2>
+          <p class="muted">Platforms you have assembled for Mission Architect and downstream tools.</p>
+        </div>
+      </div>
+      <div id="platformOutputs" class="outputs"></div>
+      <div class="actions wrap">
+        <button id="exportPlatformsBottom" class="ghost">Export MissionProject JSON</button>
+        <button id="exportPlatformsStandaloneBottom" class="ghost">Export platforms only</button>
       </div>
     </section>
 
