@@ -225,3 +225,32 @@ export interface Catalog {
   auxRadios: AuxRadio[];
   payloads: Payload[];
 }
+
+export interface MissionProjectPlatform {
+  id: string;
+  name: string;
+  origin_tool: 'uxs';
+  domain: 'air' | 'ground' | 'maritime';
+  frame_type: string;
+  payload_ids: string[];
+  mounted_node_ids: string[];
+  payload_capacity_grams?: number;
+  payload_allowance_grams?: number;
+  auw_kg?: number;
+  power_budget_w?: number;
+  battery_wh?: number;
+  hover_power_w?: number;
+  hover_throttle?: number;
+  nominal_endurance_min?: number;
+  adjusted_endurance_min?: number;
+  thrust_to_weight?: number;
+  adjusted_thrust_to_weight?: number;
+  mission_roles?: string[];
+  intended_roles?: string[];
+  environment_ref?: string;
+  environment_envelope?: { altitude_band?: string; temperature_band?: string };
+  constraints_ref?: string;
+  location?: { lat: number; lon: number; elevation_m?: number };
+  notes?: string;
+  rf_bands_ghz?: number[];
+}
