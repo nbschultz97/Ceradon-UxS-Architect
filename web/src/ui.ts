@@ -29,6 +29,7 @@ const missionRoles = [
 
 const emconModes = ['covert', 'normal', 'decoy'];
 const STORAGE_KEY = 'uxsArchitectState';
+const SCHEMA_VERSION = '1.0';
 
 const selectors = {
   frame: document.querySelector('#frame'),
@@ -376,6 +377,18 @@ function renderMetrics(stack, result) {
       `${result.thrustToWeight.toFixed(2)} (adj ${result.adjustedThrustToWeight.toFixed(2)}) ${statusPill(twrOk)}`
     ],
     ['Power budget', formatPower(result.powerBudget)],
+    [
+      'Hover throttle (env-adjusted)',
+      result.propulsionProfile
+        ? `${(result.propulsionProfile.hoverThrottle * 100).toFixed(0)}% · ${formatPower(result.propulsionProfile.hoverPower)}`
+        : '—'
+    ],
+    [
+      'Hover current per motor',
+      result.propulsionProfile?.hoverCurrentPerMotor
+        ? `${result.propulsionProfile.hoverCurrentPerMotor.toFixed(1)} A`
+        : '—'
+    ],
     ['Nominal endurance', `${result.enduranceMinutes.toFixed(1)} min`],
     [
       'Env-adjusted endurance',
@@ -565,8 +578,8 @@ function missionPlatformToSnapshot(p) {
       frame: p.frame || p.frame_type || defaults.frame
     },
     environment: {
-      altitude: env.altitude_band || p.altitude || environment.altitude,
-      temperature: env.temperature_band || p.temperature || environment.temperature
+      altitude: env.altitude_band || p.environment_envelope?.altitude_band || p.altitude || environment.altitude,
+      temperature: env.temperature_band || p.environment_envelope?.temperature_band || p.temperature || environment.temperature
     },
     constraints: { ...constraintPrefs },
     metrics: {
@@ -648,6 +661,11 @@ function snapshotToPlatform(entry, envId, constraintId, workingCatalog) {
   const rfBands = collectRfBands(entry);
   const battery = entry.selection?.battery ? findById(workingCatalog.batteries, entry.selection.battery) : null;
   const batteryWh = battery ? (battery.capacity_mah * battery.voltage_nominal) / 1000 : undefined;
+  const frame = entry.selection?.frame ? findById(workingCatalog.frames, entry.selection.frame) : null;
+  const payloadCapacity = frame?.max_auw_grams;
+  const payloadAllowance = payloadCapacity && entry.metrics?.totalWeight
+    ? Math.max(payloadCapacity - entry.metrics.totalWeight, 0)
+    : undefined;
   return {
     id: entry.id,
     name: entry.name,
@@ -659,14 +677,22 @@ function snapshotToPlatform(entry, envId, constraintId, workingCatalog) {
     rf_bands_ghz: rfBands,
     power_budget_w: entry.metrics?.powerBudget || undefined,
     battery_wh: batteryWh,
+    payload_capacity_grams: payloadCapacity,
+    payload_allowance_grams: payloadAllowance,
     auw_kg: Number.isFinite(entry.metrics?.totalWeight) ? Number((entry.metrics.totalWeight / 1000).toFixed(3)) : undefined,
     nominal_endurance_min: entry.metrics?.enduranceMinutes || undefined,
     adjusted_endurance_min: entry.metrics?.adjustedEnduranceMinutes || undefined,
     thrust_to_weight: entry.metrics?.thrustToWeight || undefined,
     adjusted_thrust_to_weight: entry.metrics?.adjustedThrustToWeight || undefined,
+    hover_throttle: entry.metrics?.hoverThrottle,
+    hover_power_w: entry.metrics?.hoverPower,
     mission_roles: entry.roleTags || [],
     intended_roles: entry.roleTags || [],
     environment_ref: envId,
+    environment_envelope: {
+      altitude_band: entry.environment?.altitude,
+      temperature_band: entry.environment?.temperature
+    },
     constraints_ref: constraintId,
     location: entry.geo || null,
     notes: entry.notes || undefined
@@ -733,7 +759,8 @@ function buildMissionProjectPayload() {
   else constraintEntries.unshift(constraintEntry);
 
   const bundle = {
-    version: baseBundle.version || '1.0',
+    schemaVersion: baseBundle.schemaVersion || SCHEMA_VERSION,
+    version: baseBundle.version || SCHEMA_VERSION,
     origin_tool: baseBundle.origin_tool || 'uxs',
     mission: { ...baseBundle.mission, ...missionMeta, origin_tool: missionMeta.origin_tool || baseBundle.origin_tool || 'uxs' },
     environment: environmentEntries,
@@ -1002,7 +1029,9 @@ function savePlatformSnapshot() {
       enduranceMinutes: lastResult.enduranceMinutes,
       adjustedEnduranceMinutes: lastResult.adjustedEnduranceMinutes,
       payloadMass: lastResult.payloadMass,
-      powerBudget: lastResult.powerBudget
+      powerBudget: lastResult.powerBudget,
+      hoverThrottle: lastResult.propulsionProfile?.hoverThrottle,
+      hoverPower: lastResult.propulsionProfile?.hoverPower
     },
     roleTags: lastResult.roleTags,
     mountedNodes: selection.nodePayloads || []

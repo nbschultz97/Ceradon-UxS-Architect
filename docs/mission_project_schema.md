@@ -2,6 +2,8 @@
 
 The Ceradon Architect tools exchange mission context using a shared **MissionProject** JSON envelope. UxS Architect reads and writes this structure for mission imports, WHITEFROST presets, and ATAK-style exports.
 
+- Bundles should include `schemaVersion` alongside `version` to mirror the Hub serializer. UxS Architect currently writes `"schemaVersion": "1.0"` by default and preserves any version present on import.
+
 ```jsonc
 {
   "version": "1.0",
