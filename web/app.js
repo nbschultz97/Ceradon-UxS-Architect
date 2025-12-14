@@ -1,3 +1,9 @@
+const APP_VERSION = "UxS Architect v0.3.0";
+const MISSIONPROJECT_SCHEMA_VERSION = "2.0.0";
+const CHANGE_LOG = [
+  { version: 'UxS Architect v0.3.0', date: '2024-06-05', changes: ['Schema v2.0.0 alignment', 'UI badges for app/schema'] },
+];
+
 const currentScript = document.currentScript;
 const catalogUrl = (currentScript && currentScript.dataset.catalog) || 'catalog.json';
 
