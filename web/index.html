@@ -110,7 +110,7 @@
         <h1>Ceradon UxS Architect</h1>
         <p class="subtitle">Offline-first sandbox for UxS stack design and evaluation.</p>
       </div>
-      <div class="badge">Client-side only · Field editable catalogs</div>
+      <div class="badge" id="versionBadge">Client-side only · Field editable catalogs</div>
     </header>
 
     <main class="layout">
@@ -118,7 +118,7 @@
         <div class="panel-header">
           <div>
             <h2>Stack Builder</h2>
-            <p class="muted">Select components, evaluate power/weight, and keep options ready for inventory mode.</p>
+            <p class="muted">Select components, evaluate power/weight, and keep options ready for inventory mode. MissionProject schema v2.0.0 with origin_tool tagging on platforms.</p>
           </div>
       <div class="controls-inline">
           <label>Domain
@@ -167,7 +167,7 @@
           <label>Node payloads (imported)
             <div class="inline-input">
               <select id="nodePayloads" multiple size="4"></select>
-              <button id="importNodes" class="ghost small" type="button">Import Node designs</button>
+              <button id="importNodes" class="ghost small" type="button">Import Node Architect JSON</button>
               <input id="nodeFile" type="file" accept="application/json" style="display: none;" />
             </div>
           </label>
@@ -221,7 +221,7 @@
         </div>
 
         <div class="actions wrap">
-          <button id="importMission" class="ghost small" type="button">Import MissionProject</button>
+          <button id="importMission" class="ghost small" type="button">Import MissionProject JSON</button>
           <input id="missionFile" type="file" accept="application/json" style="display: none;" />
           <button id="exportPlatforms" class="ghost">Export MissionProject JSON</button>
           <button id="exportPlatformsStandalone" class="ghost">Export platforms only</button>
@@ -229,6 +229,7 @@
           <button id="exportGeojson" class="ghost small">Export GeoJSON</button>
           <button id="exportCot" class="ghost small">Export CoT stub</button>
         </div>
+        <p class="helper" id="schemaHelper">MissionProject schema v2.0.0 import/export with platform origin_tool tags preserved.</p>
         <div id="appWarning" class="warning"></div>
       </section>
 
@@ -267,6 +268,7 @@
         <div>
           <h4>Available nodes from Node Architect</h4>
           <ul id="nodeLibrary" class="list"></ul>
+          <div class="muted small-note">Imports accept Node Architect JSON exports with <code>nodes[]</code> or <code>designs[]</code>.</div>
         </div>
         <div>
           <h4>Saved platforms</h4>
@@ -289,8 +291,31 @@
       </div>
     </section>
 
+    <section class="panel wide chain-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Architect chain</h2>
+          <p class="muted">Node Architect → UxS Architect → Mesh Architect → KitSmith. Mission-first flows are documented in the Architect hub.</p>
+        </div>
+        <a class="btn small" href="https://uxs.ceradonsystems.com" target="_blank" rel="noreferrer">Open Architect hub</a>
+      </div>
+      <p class="muted">Use UxS Architect to validate lift, power, and sortie timing between Node Architect payloads and Mesh/KitSmith builds.</p>
+    </section>
+
+    <section class="panel wide">
+      <div class="panel-header">
+        <div>
+          <h2>Change Log</h2>
+          <p class="muted">Latest updates to the static planner and MissionProject schema handling.</p>
+        </div>
+        <div class="badge subtle" id="schemaVersionBadge"></div>
+      </div>
+      <div id="changeLog" class="change-log"></div>
+    </section>
+
     <footer>
       <p class="muted">No network calls beyond local JSON. Future inventory mode can bind these selectors to stored manifests without backend changes.</p>
+      <p class="muted" id="footerVersion"></p>
     </footer>
   </div>
 

@@ -15,6 +15,28 @@ import {
   temperatureBands
 } from './utils.js';
 
+const APP_VERSION = 'UxS Architect v0.3.0';
+const MISSIONPROJECT_SCHEMA_VERSION = '2.0.0';
+const CHANGE_LOG = [
+  {
+    version: 'UxS Architect v0.3.0',
+    date: '2024-06-05',
+    changes: [
+      'Added MissionProject schema v2.0.0 badge, helper text, and footer mirroring.',
+      'Change Log panel plus chain-of-tools explainer aligned with Architect hub.',
+      'Mobile-friendly form stacking and scrollable platform comparison tables.'
+    ]
+  },
+  {
+    version: 'UxS Architect v0.2.1',
+    date: '2024-05-12',
+    changes: [
+      'Improved MissionProject export to keep node payloads synced with imported catalogs.',
+      'Tweaked mesh/node library cards for offline field edits.'
+    ]
+  }
+];
+
 const missionRoles = [
   'trainer',
   'recon',
@@ -197,6 +219,39 @@ function persistAppState() {
     kits,
     environment,
     constraints: constraintPrefs
+  });
+}
+
+function renderVersionBadges() {
+  const label = `${APP_VERSION} · MissionProject schema v${MISSIONPROJECT_SCHEMA_VERSION}`;
+  const badge = document.querySelector('#versionBadge');
+  const schemaBadge = document.querySelector('#schemaVersionBadge');
+  const footer = document.querySelector('#footerVersion');
+  const helper = document.querySelector('#schemaHelper');
+  if (badge) badge.textContent = label;
+  if (schemaBadge) schemaBadge.textContent = label;
+  if (footer) footer.textContent = label;
+  if (helper) helper.textContent = `MissionProject schema v${MISSIONPROJECT_SCHEMA_VERSION} import/export with platform origin_tool tags preserved.`;
+}
+
+function renderChangeLog() {
+  const container = document.querySelector('#changeLog');
+  if (!container) return;
+  container.innerHTML = '';
+  CHANGE_LOG.forEach((entry) => {
+    const card = document.createElement('div');
+    card.className = 'change-log-entry';
+    const title = document.createElement('h4');
+    title.textContent = `${entry.version} — ${entry.date}`;
+    card.appendChild(title);
+    const list = document.createElement('ul');
+    (entry.changes || []).forEach((item) => {
+      const li = document.createElement('li');
+      li.textContent = item;
+      list.appendChild(li);
+    });
+    card.appendChild(list);
+    container.appendChild(card);
   });
 }
 
@@ -733,15 +788,17 @@ function buildMissionProjectPayload() {
   else constraintEntries.unshift(constraintEntry);
 
   const bundle = {
-    version: baseBundle.version || '1.0',
+    ...baseBundle,
+    schemaVersion: baseBundle.schemaVersion || MISSIONPROJECT_SCHEMA_VERSION,
+    version: baseBundle.version || MISSIONPROJECT_SCHEMA_VERSION,
     origin_tool: baseBundle.origin_tool || 'uxs',
     mission: { ...baseBundle.mission, ...missionMeta, origin_tool: missionMeta.origin_tool || baseBundle.origin_tool || 'uxs' },
     environment: environmentEntries,
     constraints: constraintEntries,
     nodes: Array.from(nodeEntries.values()),
     platforms: Array.from(mergedPlatforms.values()),
-    mesh_links: baseBundle.mesh_links || meshLinks || [],
-    kits: baseBundle.kits || kits || []
+    mesh_links: baseBundle.mesh_links ?? meshLinks ?? [],
+    kits: baseBundle.kits ?? kits ?? []
   };
 
   return importedMissionProject?.mission_project ? { mission_project: bundle } : bundle;
@@ -1073,6 +1130,8 @@ async function main() {
   refreshCatalogWithNodes();
   populateStaticControls();
   ensureSelection();
+  renderVersionBadges();
+  renderChangeLog();
   const domain = selectors.domain.value;
   renderSelectionOptions(domain);
   bindPayloadFilter();
