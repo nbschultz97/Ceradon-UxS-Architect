@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "2.0.0",
   "origin_tool": "uxs",
   "mission": {
     "id": "mission-whitefrost",
@@ -11,17 +11,17 @@
   "environment": [
     {
       "id": "env-whitefrost",
-      "altitude_band": "mountain",
-      "temperature_band": "freezing",
-      "notes": "Thin air, icy rotor wake, cold-soaked packs"
+      "notes": "Thin air, icy rotor wake, cold-soaked packs",
+      "altitudeBand": "mountain",
+      "temperatureBand": "freezing"
     }
   ],
   "constraints": [
     {
       "id": "cst-whitefrost",
-      "min_adjusted_endurance_min": 20,
-      "min_thrust_to_weight": 1.3,
-      "max_auw_kg": 6
+      "minThrustToWeight": 1.3,
+      "minAdjustedEnduranceMin": 20,
+      "maxAuwKg": 6
     }
   ],
   "nodes": [
@@ -33,15 +33,15 @@
         "sensor_node"
       ],
       "origin_tool": "node",
-      "power_draw_w": 4.5,
-      "weight_grams": 620,
-      "rf_band_ghz": 2.4,
       "location": {
         "lat": 39.6121,
         "lon": -105.9449,
         "elevation_m": 3120
       },
-      "notes": "3D-printed shell, conformal heater strip"
+      "notes": "3D-printed shell, conformal heater strip",
+      "weightGrams": 620,
+      "powerDrawW": 4.5,
+      "rfBandGhz": 2.4
     },
     {
       "id": "node-snowfield-sustain",
@@ -51,15 +51,15 @@
         "sensor_node"
       ],
       "origin_tool": "node",
-      "power_draw_w": 2.2,
-      "weight_grams": 480,
-      "rf_band_ghz": 0.9,
       "location": {
         "lat": 39.6056,
         "lon": -105.9314,
         "elevation_m": 2860
       },
-      "notes": "Partner-force drop with handwarmers and micro solar mat"
+      "notes": "Partner-force drop with handwarmers and micro solar mat",
+      "weightGrams": 480,
+      "powerDrawW": 2.2,
+      "rfBandGhz": 0.9
     },
     {
       "id": "node-whitefrost-airborne",
@@ -69,10 +69,10 @@
         "compute"
       ],
       "origin_tool": "node",
-      "power_draw_w": 18,
-      "weight_grams": 420,
-      "rf_band_ghz": 5.8,
-      "notes": "Imported Node Architect design with CSI-ready compute stack"
+      "notes": "Imported Node Architect design with CSI-ready compute stack",
+      "weightGrams": 420,
+      "powerDrawW": 18,
+      "rfBandGhz": 5.8
     },
     {
       "id": "node-whitefrost-relay",
@@ -82,10 +82,10 @@
         "mesh"
       ],
       "origin_tool": "node",
-      "power_draw_w": 12,
-      "weight_grams": 520,
-      "rf_band_ghz": 2.4,
-      "notes": "Dual-radio mesh payload tuned for cold weather"
+      "notes": "Dual-radio mesh payload tuned for cold weather",
+      "weightGrams": 520,
+      "powerDrawW": 12,
+      "rfBandGhz": 2.4
     }
   ],
   "platforms": [
@@ -94,154 +94,138 @@
       "name": "WHITEFROST Recon Quad",
       "origin_tool": "uxs",
       "domain": "air",
-      "frame_type": "quad",
-      "mounted_node_ids": [
-        "node-ridge-relay"
-      ],
-      "payload_ids": [
-        "eo_ir_ball",
-        "csi_pose_array"
-      ],
-      "rf_bands_ghz": [
-        5.8,
-        0.9
-      ],
-      "power_budget_w": 185,
-      "battery_wh": 320,
-      "auw_kg": 4.9,
-      "nominal_endurance_min": 27.5,
-      "adjusted_endurance_min": 23.4,
-      "mission_roles": [
-        "recon",
-        "relay"
-      ],
-      "environment_ref": "env-whitefrost",
-      "constraints_ref": "cst-whitefrost",
       "location": {
         "lat": 39.6107,
         "lon": -105.9372,
         "elevation_m": 2980
       },
-      "notes": "Printed arms, insulated ESCs, slow climb profile to avoid icing"
+      "notes": "Printed arms, insulated ESCs, slow climb profile to avoid icing",
+      "frameType": "quad",
+      "mountedNodeIds": [
+        "node-ridge-relay"
+      ],
+      "payloadIds": [
+        "eo_ir_ball",
+        "csi_pose_array"
+      ],
+      "rfBandsGhz": [
+        5.8,
+        0.9
+      ],
+      "powerBudgetW": 185,
+      "batteryWh": 320,
+      "auwKg": 4.9,
+      "nominalEnduranceMin": 27.5,
+      "adjustedEnduranceMin": 23.4,
+      "missionRoles": [
+        "recon",
+        "relay"
+      ],
+      "environmentRef": "env-whitefrost",
+      "constraintsRef": "cst-whitefrost"
     },
     {
       "id": "plt-whitefrost-relay-kite",
       "name": "WHITEFROST Tethered Relay",
       "origin_tool": "uxs",
       "domain": "air",
-      "frame_type": "tethered",
-      "mounted_node_ids": [
-        "node-ridge-relay",
-        "node-snowfield-sustain"
-      ],
-      "payload_ids": [
-        "low_bandwidth_relay"
-      ],
-      "rf_bands_ghz": [
-        0.9,
-        2.4
-      ],
-      "power_budget_w": 95,
-      "battery_wh": 180,
-      "auw_kg": 2.6,
-      "nominal_endurance_min": 180,
-      "adjusted_endurance_min": 150,
-      "mission_roles": [
-        "relay",
-        "loiter"
-      ],
-      "environment_ref": "env-whitefrost",
-      "constraints_ref": "cst-whitefrost",
       "location": {
         "lat": 39.6144,
         "lon": -105.9461,
         "elevation_m": 3150
       },
-      "notes": "Lightweight tether provides DC and data backhaul"
+      "notes": "Lightweight tether provides DC and data backhaul",
+      "frameType": "tethered",
+      "mountedNodeIds": [
+        "node-ridge-relay",
+        "node-snowfield-sustain"
+      ],
+      "payloadIds": [
+        "low_bandwidth_relay"
+      ],
+      "rfBandsGhz": [
+        0.9,
+        2.4
+      ],
+      "powerBudgetW": 95,
+      "batteryWh": 180,
+      "auwKg": 2.6,
+      "nominalEnduranceMin": 180,
+      "adjustedEnduranceMin": 150,
+      "missionRoles": [
+        "relay",
+        "loiter"
+      ],
+      "environmentRef": "env-whitefrost",
+      "constraintsRef": "cst-whitefrost"
     },
     {
       "id": "plt-whitefrost-recon-printed",
       "name": "WHITEFROST recon quad (3D-printed)",
       "origin_tool": "uxs",
       "domain": "air",
-      "frame_type": "whitefrost_printed_quad",
-      "mounted_node_ids": [
+      "notes": "Printed quad using imported airborne compute node.",
+      "frameType": "whitefrost_printed_quad",
+      "mountedNodeIds": [
         "node-whitefrost-airborne"
       ],
-      "payload_ids": [
+      "payloadIds": [
         "payload_whitefrost_recon_sensor",
         "payload_whitefrost_relay_core"
       ],
-      "rf_bands_ghz": [
+      "rfBandsGhz": [
         5.8,
         2.4
       ],
-      "power_budget_w": 210,
-      "battery_wh": 560,
-      "auw_kg": 4.8,
-      "nominal_endurance_min": 31,
-      "adjusted_endurance_min": 24,
-      "thrust_to_weight": 1.95,
-      "adjusted_thrust_to_weight": 1.6,
-      "mission_roles": [
+      "powerBudgetW": 210,
+      "batteryWh": 560,
+      "auwKg": 4.8,
+      "nominalEnduranceMin": 31,
+      "adjustedEnduranceMin": 24,
+      "thrustToWeight": 1.95,
+      "adjustedThrustToWeight": 1.6,
+      "missionRoles": [
         "recon",
         "relay"
       ],
-      "intended_roles": [
+      "intendedRoles": [
         "recon"
       ],
-      "environment_ref": "env-whitefrost",
-      "constraints_ref": "cst-whitefrost",
-      "notes": "Printed quad using imported airborne compute node."
+      "environmentRef": "env-whitefrost",
+      "constraintsRef": "cst-whitefrost"
     },
     {
       "id": "plt-whitefrost-relay-quad",
       "name": "WHITEFROST mesh relay quad",
       "origin_tool": "uxs",
       "domain": "air",
-      "frame_type": "whitefrost_printed_quad",
-      "mounted_node_ids": [
+      "notes": "Heavier battery relay quad with imported mesh node.",
+      "frameType": "whitefrost_printed_quad",
+      "mountedNodeIds": [
         "node-whitefrost-relay"
       ],
-      "payload_ids": [
+      "payloadIds": [
         "payload_whitefrost_relay_core"
       ],
-      "rf_bands_ghz": [
+      "rfBandsGhz": [
         2.4
       ],
-      "power_budget_w": 190,
-      "battery_wh": 640,
-      "auw_kg": 5.0,
-      "nominal_endurance_min": 46,
-      "adjusted_endurance_min": 35,
-      "thrust_to_weight": 1.8,
-      "adjusted_thrust_to_weight": 1.5,
-      "mission_roles": [
+      "powerBudgetW": 190,
+      "batteryWh": 640,
+      "auwKg": 5.0,
+      "nominalEnduranceMin": 46,
+      "adjustedEnduranceMin": 35,
+      "thrustToWeight": 1.8,
+      "adjustedThrustToWeight": 1.5,
+      "missionRoles": [
         "relay",
         "training"
       ],
-      "intended_roles": [
+      "intendedRoles": [
         "relay"
       ],
-      "environment_ref": "env-whitefrost",
-      "constraints_ref": "cst-whitefrost",
-      "notes": "Heavier battery relay quad with imported mesh node."
-    }
-  ],
-  "mesh_links": [
-    {
-      "id": "link-ridge-to-recon",
-      "from": "node-ridge-relay",
-      "to": "plt-whitefrost-recon-quad",
-      "rf_band_ghz": 2.4,
-      "notes": "Line-of-sight hop to overwatch quad"
-    },
-    {
-      "id": "link-relay-to-sustain",
-      "from": "node-ridge-relay",
-      "to": "node-snowfield-sustain",
-      "rf_band_ghz": 0.9,
-      "notes": "Low-band mesh to sustainment cache"
+      "environmentRef": "env-whitefrost",
+      "constraintsRef": "cst-whitefrost"
     }
   ],
   "kits": [
@@ -249,13 +233,30 @@
       "id": "kit-whitefrost-sustainment",
       "name": "WHITEFROST sustainment kit",
       "origin_tool": "kit",
-      "supported_platform_ids": [
+      "notes": "COTS cold-weather pack with foam-insert shipping crate",
+      "supportedPlatformIds": [
         "plt-whitefrost-recon-quad",
         "plt-whitefrost-relay-kite"
       ],
-      "power_budget_w": 140,
-      "battery_wh": 260,
-      "notes": "COTS cold-weather pack with foam-insert shipping crate"
+      "powerBudgetW": 140,
+      "batteryWh": 260
+    }
+  ],
+  "schemaVersion": "2.0.0",
+  "meshLinks": [
+    {
+      "id": "link-ridge-to-recon",
+      "from": "node-ridge-relay",
+      "to": "plt-whitefrost-recon-quad",
+      "notes": "Line-of-sight hop to overwatch quad",
+      "rfBandGhz": 2.4
+    },
+    {
+      "id": "link-relay-to-sustain",
+      "from": "node-ridge-relay",
+      "to": "node-snowfield-sustain",
+      "notes": "Low-band mesh to sustainment cache",
+      "rfBandGhz": 0.9
     }
   ]
 }

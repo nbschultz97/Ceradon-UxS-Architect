@@ -49,7 +49,7 @@ Open https://nbschultz97.github.io/Ceradon-UxS-Architect/ (or load `web/index.ht
 
 ### MissionProject, GeoJSON, and CoT exports
 - Use **Import MissionProject** / **Export MissionProject** in the UI to round-trip the schema described in `docs/mission_project_schema.md`. Exports tag each entity with `origin_tool`, include environment/constraint references, and stay tolerant of partial inputs (e.g., mesh links without coordinates).
-- **Export GeoJSON** and **Export CoT stub** buttons emit TAK-friendly overlays derived from the MissionProject bundle. See `docs/atak_exports.md` for the exact fields.
+- The MissionProject panel shows the live v2 bundle and provides copy/download actions plus GeoJSON/CoT overlays.
 - A **WHITEFROST Demo** button loads the preset cold-weather scenario from `data/whitefrost_mission_project.json` (mesh relays, recon quad, sustainment cache).
 
 ## Extending

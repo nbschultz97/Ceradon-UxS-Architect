@@ -83,6 +83,14 @@ const selectors = {
   exportMission: document.querySelector('#exportMission'),
   exportGeojson: document.querySelector('#exportGeojson'),
   exportCot: document.querySelector('#exportCot'),
+  missionPreview: document.querySelector('#missionProjectJson'),
+  copyMissionPreview: document.querySelector('#copyMissionProject'),
+  downloadMissionPreview: document.querySelector('#downloadMissionProject'),
+  copyGeojson: document.querySelector('#copyGeojson'),
+  downloadGeojson: document.querySelector('#downloadGeojson'),
+  downloadCot: document.querySelector('#downloadCot'),
+  startWhitefrostWizard: document.querySelector('#startWhitefrostWizard'),
+  whitefrostFlow: document.querySelector('#whitefrostFlow'),
   missionFile: document.querySelector('#missionFile'),
   loadWhitefrost: document.querySelector('#loadWhitefrost'),
   loadDemo: document.querySelector('#loadDemo'),
@@ -107,6 +115,75 @@ let constraintPrefs = { minTwr: null, minEndurance: null, maxAuw: null };
 let importedMissionProject = null;
 let lastResult = null;
 let lastStack = null;
+let lastMissionProjectText = '';
+
+function pickField(entry: any, ...names: string[]) {
+  for (const name of names) {
+    if (entry && entry[name] !== undefined) return entry[name];
+  }
+  return undefined;
+}
+
+function upgradeMissionBundle(input: any) {
+  const bundle = input?.mission_project || input || {};
+  const upgraded: any = { ...bundle };
+
+  const mapEnv = (env: any) => ({
+    ...env,
+    altitudeBand: pickField(env, 'altitudeBand', 'altitude_band'),
+    temperatureBand: pickField(env, 'temperatureBand', 'temperature_band')
+  });
+
+  const mapConstraint = (c: any) => ({
+    ...c,
+    minThrustToWeight: pickField(c, 'minThrustToWeight', 'min_thrust_to_weight'),
+    minAdjustedEnduranceMin: pickField(c, 'minAdjustedEnduranceMin', 'min_adjusted_endurance_min'),
+    maxAuwKg: pickField(c, 'maxAuwKg', 'max_auw_kg')
+  });
+
+  const mapNode = (n: any) => ({
+    ...n,
+    weightGrams: pickField(n, 'weightGrams', 'weight_grams'),
+    powerDrawW: pickField(n, 'powerDrawW', 'power_draw_w', 'power_w'),
+    rfBandGhz: pickField(n, 'rfBandGhz', 'rf_band_ghz'),
+    role: pickField(n, 'role', 'role_tags') || []
+  });
+
+  const mapPlatform = (p: any) => ({
+    ...p,
+    frameType: pickField(p, 'frameType', 'frame_type', 'frame'),
+    mountedNodeIds: pickField(p, 'mountedNodeIds', 'mounted_node_ids') || [],
+    payloadIds: pickField(p, 'payloadIds', 'payload_ids') || [],
+    rfBandsGhz: pickField(p, 'rfBandsGhz', 'rf_bands_ghz') || [],
+    powerBudgetW: pickField(p, 'powerBudgetW', 'power_budget_w'),
+    batteryWh: pickField(p, 'batteryWh', 'battery_wh'),
+    auwKg: pickField(p, 'auwKg', 'auw_kg'),
+    nominalEnduranceMin: pickField(p, 'nominalEnduranceMin', 'nominal_endurance_min'),
+    adjustedEnduranceMin: pickField(p, 'adjustedEnduranceMin', 'adjusted_endurance_min'),
+    thrustToWeight: pickField(p, 'thrustToWeight', 'thrust_to_weight'),
+    adjustedThrustToWeight: pickField(p, 'adjustedThrustToWeight', 'adjusted_thrust_to_weight', 'thrust_to_weight'),
+    missionRoles: pickField(p, 'missionRoles', 'mission_roles') || [],
+    intendedRoles: pickField(p, 'intendedRoles', 'intended_roles') || [],
+    environmentRef: pickField(p, 'environmentRef', 'environment_ref'),
+    constraintsRef: pickField(p, 'constraintsRef', 'constraints_ref')
+  });
+
+  const mapLink = (l: any) => ({ ...l, rfBandGhz: pickField(l, 'rfBandGhz', 'rf_band_ghz') });
+
+  upgraded.schemaVersion = upgraded.schemaVersion || MISSIONPROJECT_SCHEMA_VERSION;
+  upgraded.version = upgraded.version || MISSIONPROJECT_SCHEMA_VERSION;
+  upgraded.environment = (bundle.environment || []).map(mapEnv);
+  upgraded.constraints = (bundle.constraints || []).map(mapConstraint);
+  upgraded.nodes = (bundle.nodes || []).map(mapNode);
+  upgraded.platforms = (bundle.platforms || []).map(mapPlatform);
+  upgraded.meshLinks = ([...(bundle.meshLinks || []), ...(bundle.mesh_links || [])] as any[]).map(mapLink);
+  upgraded.kits = (bundle.kits || []).map((k: any) => ({
+    ...k,
+    supportedPlatformIds: pickField(k, 'supportedPlatformIds', 'supported_platform_ids')
+  }));
+
+  return input?.mission_project ? { mission_project: upgraded } : upgraded;
+}
 
 
 function deriveNodeComponents(nodes = []) {
@@ -628,59 +705,75 @@ function missionPlatformToSnapshot(p) {
     selection: {
       ...defaults,
       ...(p.selection || {}),
-      payloads: p.payload_ids || p.payloads || defaults.payloads || [],
-      nodePayloads: p.mounted_node_ids || [],
+      payloads: p.payload_ids || p.payloads || p.payloadIds || defaults.payloads || [],
+      nodePayloads: p.mounted_node_ids || p.mountedNodeIds || [],
       domain,
-      frame: p.frame || p.frame_type || defaults.frame
+      frame: pickField(p, 'frame', 'frame_type', 'frameType') || defaults.frame
     },
     environment: {
-      altitude: env.altitude_band || p.environment_envelope?.altitude_band || p.altitude || environment.altitude,
-      temperature: env.temperature_band || p.environment_envelope?.temperature_band || p.temperature || environment.temperature
+      altitude:
+        pickField(env, 'altitudeBand', 'altitude_band') ||
+        pickField(p.environment_envelope || {}, 'altitudeBand', 'altitude_band') ||
+        p.altitude ||
+        environment.altitude,
+      temperature:
+        pickField(env, 'temperatureBand', 'temperature_band') ||
+        pickField(p.environment_envelope || {}, 'temperatureBand', 'temperature_band') ||
+        p.temperature ||
+        environment.temperature
     },
     constraints: { ...constraintPrefs },
     metrics: {
-      totalWeight: Number.isFinite(p.auw_kg) ? p.auw_kg * 1000 : 0,
-      thrustToWeight: Number(p.thrust_to_weight || 0),
-      adjustedThrustToWeight: Number(p.adjusted_thrust_to_weight || p.thrust_to_weight || 0),
-      enduranceMinutes: Number(p.nominal_endurance_min || p.adjusted_endurance_min || 0),
-      adjustedEnduranceMinutes: Number(p.adjusted_endurance_min || p.nominal_endurance_min || 0),
+      totalWeight: Number.isFinite(p.auw_kg ?? p.auwKg) ? (p.auw_kg ?? p.auwKg) * 1000 : 0,
+      thrustToWeight: Number(p.thrust_to_weight ?? p.thrustToWeight || 0),
+      adjustedThrustToWeight: Number(p.adjusted_thrust_to_weight ?? p.adjustedThrustToWeight ?? p.thrust_to_weight || 0),
+      enduranceMinutes: Number(p.nominal_endurance_min ?? p.nominalEnduranceMin ?? p.adjusted_endurance_min ?? 0),
+      adjustedEnduranceMinutes: Number(p.adjusted_endurance_min ?? p.adjustedEnduranceMin ?? p.nominal_endurance_min || 0),
       payloadMass: Number.isFinite(p.payload_mass_kg) ? p.payload_mass_kg * 1000 : 0,
-      powerBudget: p.power_budget_w || null
+      powerBudget: p.power_budget_w || p.powerBudgetW || null
     },
-    roleTags: p.mission_roles || p.intended_roles || [],
-    mountedNodes: p.mounted_node_ids || [],
+    roleTags: p.mission_roles || p.missionRoles || p.intended_roles || [],
+    mountedNodes: p.mounted_node_ids || p.mountedNodeIds || [],
     geo: sanitizeLocation(p.location)
   };
 }
 
 function applyMissionProject(project) {
-  const bundle = project.mission_project || project;
-  importedMissionProject = project;
+  const normalized = upgradeMissionBundle(project);
+  const bundle = normalized.mission_project || normalized;
+  importedMissionProject = normalized;
   missionMeta = { ...missionMeta, ...(bundle.mission || {}) };
-  meshLinks = bundle.mesh_links || [];
+  meshLinks = bundle.meshLinks || bundle.mesh_links || [];
   kits = bundle.kits || [];
 
   const env = (bundle.environment && bundle.environment[0]) || {};
   environment = {
-    altitude: env.altitude_band || environment.altitude,
-    temperature: env.temperature_band || environment.temperature
+    altitude: pickField(env, 'altitudeBand', 'altitude_band') || environment.altitude,
+    temperature: pickField(env, 'temperatureBand', 'temperature_band') || environment.temperature
   };
   selectors.altitude.value = environment.altitude;
   selectors.temperature.value = environment.temperature;
 
   const c = (bundle.constraints && bundle.constraints[0]) || {};
   constraintPrefs = {
-    minTwr: Number.isFinite(c.min_thrust_to_weight) ? c.min_thrust_to_weight : constraintPrefs.minTwr,
-    minEndurance: Number.isFinite(c.min_adjusted_endurance_min) ? c.min_adjusted_endurance_min : constraintPrefs.minEndurance,
-    maxAuw: Number.isFinite(c.max_auw_kg) ? c.max_auw_kg : constraintPrefs.maxAuw
+    minTwr: Number.isFinite(c.minThrustToWeight ?? c.min_thrust_to_weight)
+      ? c.minThrustToWeight ?? c.min_thrust_to_weight
+      : constraintPrefs.minTwr,
+    minEndurance: Number.isFinite(c.minAdjustedEnduranceMin ?? c.min_adjusted_endurance_min)
+      ? c.minAdjustedEnduranceMin ?? c.min_adjusted_endurance_min
+      : constraintPrefs.minEndurance,
+    maxAuw: Number.isFinite(c.maxAuwKg ?? c.max_auw_kg)
+      ? c.maxAuwKg ?? c.max_auw_kg
+      : constraintPrefs.maxAuw
   };
   hydrateConstraintInputs();
 
   nodeLibrary = (bundle.nodes || []).map((n) => ({
     id: n.id || n.node_id || n.uuid || n.name,
     name: n.name || 'Imported node',
-    weight_grams: n.weight_grams || (Number.isFinite(n.mass_kg) ? Math.round(n.mass_kg * 1000) : 0),
-    power_draw_typical_w: n.power_w || n.power_draw_w || 0,
+    weight_grams:
+      n.weight_grams || n.weightGrams || (Number.isFinite(n.mass_kg) ? Math.round(n.mass_kg * 1000) : 0),
+    power_draw_typical_w: n.power_w || n.power_draw_w || n.powerDrawW || 0,
     role_tags: n.role || n.role_tags || [],
     origin_tool: n.origin_tool || 'node',
     notes: n.notes || 'Imported from MissionProject',
@@ -698,7 +791,7 @@ function applyMissionProject(project) {
 }
 
 function collectRfBands(entry) {
-  const rfSet = new Set(entry.rf_bands_ghz || []);
+  const rfSet = new Set(entry.rf_bands_ghz || entry.rfBandsGhz || []);
   const sel = entry.selection || {};
   const workingCatalog = getCatalog();
   const rc = findById(workingCatalog.rcReceivers, sel.rcReceiver || sel.rc_receiver);
@@ -727,29 +820,29 @@ function snapshotToPlatform(entry, envId, constraintId, workingCatalog) {
     name: entry.name,
     origin_tool: entry.origin_tool || 'uxs',
     domain: entry.selection?.domain || 'air',
-    frame_type: entry.frameType || entry.selection?.frame || 'frame',
-    payload_ids: entry.selection?.payloads || [],
-    mounted_node_ids: entry.mountedNodes || [],
-    rf_bands_ghz: rfBands,
-    power_budget_w: entry.metrics?.powerBudget || undefined,
-    battery_wh: batteryWh,
-    payload_capacity_grams: payloadCapacity,
-    payload_allowance_grams: payloadAllowance,
-    auw_kg: Number.isFinite(entry.metrics?.totalWeight) ? Number((entry.metrics.totalWeight / 1000).toFixed(3)) : undefined,
-    nominal_endurance_min: entry.metrics?.enduranceMinutes || undefined,
-    adjusted_endurance_min: entry.metrics?.adjustedEnduranceMinutes || undefined,
-    thrust_to_weight: entry.metrics?.thrustToWeight || undefined,
-    adjusted_thrust_to_weight: entry.metrics?.adjustedThrustToWeight || undefined,
-    hover_throttle: entry.metrics?.hoverThrottle,
-    hover_power_w: entry.metrics?.hoverPower,
-    mission_roles: entry.roleTags || [],
-    intended_roles: entry.roleTags || [],
-    environment_ref: envId,
-    environment_envelope: {
-      altitude_band: entry.environment?.altitude,
-      temperature_band: entry.environment?.temperature
+    frameType: entry.frameType || entry.selection?.frame || 'frame',
+    payloadIds: entry.selection?.payloads || [],
+    mountedNodeIds: entry.mountedNodes || [],
+    rfBandsGhz: rfBands,
+    powerBudgetW: entry.metrics?.powerBudget || undefined,
+    batteryWh: batteryWh,
+    payloadCapacityGrams: payloadCapacity,
+    payloadAllowanceGrams: payloadAllowance,
+    auwKg: Number.isFinite(entry.metrics?.totalWeight) ? Number((entry.metrics.totalWeight / 1000).toFixed(3)) : undefined,
+    nominalEnduranceMin: entry.metrics?.enduranceMinutes || undefined,
+    adjustedEnduranceMin: entry.metrics?.adjustedEnduranceMinutes || undefined,
+    thrustToWeight: entry.metrics?.thrustToWeight || undefined,
+    adjustedThrustToWeight: entry.metrics?.adjustedThrustToWeight || undefined,
+    hoverThrottle: entry.metrics?.hoverThrottle,
+    hoverPowerW: entry.metrics?.hoverPower,
+    missionRoles: entry.roleTags || [],
+    intendedRoles: entry.roleTags || [],
+    environmentRef: envId,
+    environment: {
+      altitudeBand: entry.environment?.altitude,
+      temperatureBand: entry.environment?.temperature
     },
-    constraints_ref: constraintId,
+    constraintsRef: constraintId,
     location: entry.geo || null,
     notes: entry.notes || undefined
   };
@@ -757,26 +850,27 @@ function snapshotToPlatform(entry, envId, constraintId, workingCatalog) {
 
 function buildMissionProjectPayload() {
   const workingCatalog = getCatalog();
-  const baseBundle = importedMissionProject ? importedMissionProject.mission_project || importedMissionProject : {};
-  const envId = missionMeta.environment_id || baseBundle.environment?.[0]?.id || 'env-local';
-  const constraintId = missionMeta.constraint_id || baseBundle.constraints?.[0]?.id || 'cst-local';
+  const baseBundle = upgradeMissionBundle(importedMissionProject || {});
+  const innerBase = baseBundle.mission_project || baseBundle;
+  const envId = missionMeta.environment_id || innerBase.environment?.[0]?.id || 'env-local';
+  const constraintId = missionMeta.constraint_id || innerBase.constraints?.[0]?.id || 'cst-local';
 
   const environmentEntry = {
     id: envId,
-    altitude_band: environment.altitude,
-    temperature_band: environment.temperature,
+    altitudeBand: environment.altitude,
+    temperatureBand: environment.temperature,
     notes: missionMeta.environment_notes || 'Captured from UI environment selectors'
   };
   const constraintEntry = {
     id: constraintId,
-    min_thrust_to_weight: constraintPrefs.minTwr ?? undefined,
-    min_adjusted_endurance_min: constraintPrefs.minEndurance ?? undefined,
-    max_auw_kg: constraintPrefs.maxAuw ?? undefined
+    minThrustToWeight: constraintPrefs.minTwr ?? undefined,
+    minAdjustedEnduranceMin: constraintPrefs.minEndurance ?? undefined,
+    maxAuwKg: constraintPrefs.maxAuw ?? undefined
   };
 
   const platformEntries = savedPlatforms.map((p) => snapshotToPlatform(p, envId, constraintId, workingCatalog));
   const mergedPlatforms = new Map();
-  (baseBundle.platforms || []).forEach((p) => {
+  (innerBase.platforms || []).forEach((p) => {
     if (p.id) mergedPlatforms.set(p.id, p);
   });
   platformEntries.forEach((p) => {
@@ -784,7 +878,7 @@ function buildMissionProjectPayload() {
   });
 
   const nodeEntries = new Map();
-  (baseBundle.nodes || []).forEach((n) => {
+  (innerBase.nodes || []).forEach((n) => {
     if (n.id) nodeEntries.set(n.id, n);
   });
   (nodeLibrary || []).forEach((n) => {
@@ -804,35 +898,36 @@ function buildMissionProjectPayload() {
     nodeEntries.set(n.id, merged);
   });
 
-  const environmentEntries = Array.isArray(baseBundle.environment) ? [...baseBundle.environment] : [];
+  const environmentEntries = Array.isArray(innerBase.environment) ? [...innerBase.environment] : [];
   const envIndex = environmentEntries.findIndex((e) => e.id === envId);
   if (envIndex >= 0) environmentEntries[envIndex] = { ...environmentEntries[envIndex], ...environmentEntry };
   else environmentEntries.unshift(environmentEntry);
 
-  const constraintEntries = Array.isArray(baseBundle.constraints) ? [...baseBundle.constraints] : [];
+  const constraintEntries = Array.isArray(innerBase.constraints) ? [...innerBase.constraints] : [];
   const constraintIndex = constraintEntries.findIndex((c) => c.id === constraintId);
   if (constraintIndex >= 0) constraintEntries[constraintIndex] = { ...constraintEntries[constraintIndex], ...constraintEntry };
   else constraintEntries.unshift(constraintEntry);
 
   const bundle = {
-    ...baseBundle,
-    schemaVersion: baseBundle.schemaVersion || MISSIONPROJECT_SCHEMA_VERSION,
-    version: baseBundle.version || MISSIONPROJECT_SCHEMA_VERSION,
-    origin_tool: baseBundle.origin_tool || 'uxs',
-    mission: { ...baseBundle.mission, ...missionMeta, origin_tool: missionMeta.origin_tool || baseBundle.origin_tool || 'uxs' },
+    ...innerBase,
+    schemaVersion: innerBase.schemaVersion || MISSIONPROJECT_SCHEMA_VERSION,
+    version: innerBase.version || MISSIONPROJECT_SCHEMA_VERSION,
+    origin_tool: innerBase.origin_tool || 'uxs',
+    mission: { ...innerBase.mission, ...missionMeta, origin_tool: missionMeta.origin_tool || innerBase.origin_tool || 'uxs' },
     environment: environmentEntries,
     constraints: constraintEntries,
     nodes: Array.from(nodeEntries.values()),
     platforms: Array.from(mergedPlatforms.values()),
-    mesh_links: baseBundle.mesh_links ?? meshLinks ?? [],
-    kits: baseBundle.kits ?? kits ?? []
+    meshLinks: innerBase.meshLinks ?? innerBase.mesh_links ?? meshLinks ?? [],
+    kits: innerBase.kits ?? kits ?? []
   };
 
   return importedMissionProject?.mission_project ? { mission_project: bundle } : bundle;
 }
 
 function missionProjectToGeoJson(project) {
-  const bundle = project.mission_project || project;
+  const normalized = upgradeMissionBundle(project);
+  const bundle = normalized.mission_project || normalized;
   const features = [];
   const pushPoint = (item, type) => {
     const loc = sanitizeLocation(item.location);
@@ -848,13 +943,13 @@ function missionProjectToGeoJson(project) {
         name: item.name,
         type,
         origin_tool: item.origin_tool || bundle.origin_tool || 'uxs',
-        role: item.role || item.mission_roles || [],
-        rf_band_ghz: item.rf_band_ghz,
-        rf_bands_ghz: item.rf_bands_ghz,
-        power_draw_w: item.power_draw_w,
-        power_budget_w: item.power_budget_w,
-        environment_ref: item.environment_ref,
-        constraints_ref: item.constraints_ref
+        role: item.role || item.mission_roles || item.missionRoles || [],
+        rf_band_ghz: pickField(item, 'rf_band_ghz', 'rfBandGhz'),
+        rf_bands_ghz: pickField(item, 'rf_bands_ghz', 'rfBandsGhz'),
+        power_draw_w: pickField(item, 'power_draw_w', 'powerDrawW'),
+        power_budget_w: pickField(item, 'power_budget_w', 'powerBudgetW'),
+        environment_ref: pickField(item, 'environment_ref', 'environmentRef'),
+        constraints_ref: pickField(item, 'constraints_ref', 'constraintsRef')
       }
     });
   };
@@ -894,12 +989,13 @@ function missionProjectToGeoJson(project) {
 }
 
 function missionProjectToCot(project) {
-  const bundle = project.mission_project || project;
+  const normalized = upgradeMissionBundle(project);
+  const bundle = normalized.mission_project || normalized;
   const events = [];
   const pushEvent = (item, type) => {
     const loc = sanitizeLocation(item.location);
     if (!loc) return;
-    const roles = item.mission_roles || item.role || [];
+    const roles = item.mission_roles || item.missionRoles || item.role || [];
     events.push({
       id: item.id,
       type,
@@ -908,12 +1004,12 @@ function missionProjectToCot(project) {
       point: { lat: loc.lat, lon: loc.lon, hae: loc.elevation_m },
       detail: {
         origin_tool: item.origin_tool || bundle.origin_tool || 'uxs',
-        rf_band_ghz: item.rf_band_ghz,
-        rf_bands_ghz: item.rf_bands_ghz,
-        power_draw_w: item.power_draw_w,
-        power_budget_w: item.power_budget_w,
-        constraints_ref: item.constraints_ref,
-        environment_ref: item.environment_ref
+        rf_band_ghz: pickField(item, 'rf_band_ghz', 'rfBandGhz'),
+        rf_bands_ghz: pickField(item, 'rf_bands_ghz', 'rfBandsGhz'),
+        power_draw_w: pickField(item, 'power_draw_w', 'powerDrawW'),
+        power_budget_w: pickField(item, 'power_budget_w', 'powerBudgetW'),
+        constraints_ref: pickField(item, 'constraints_ref', 'constraintsRef'),
+        environment_ref: pickField(item, 'environment_ref', 'environmentRef')
       }
     });
   };
@@ -921,6 +1017,20 @@ function missionProjectToCot(project) {
   (bundle.platforms || []).forEach((p) => pushEvent(p, 'a-f-A-M-UxS'));
   (bundle.nodes || []).forEach((n) => pushEvent(n, 'b-r-f'));
   return { events };
+}
+
+function renderMissionProjectPreview() {
+  const payload = buildMissionProjectPayload();
+  lastMissionProjectText = JSON.stringify(payload, null, 2);
+  if (selectors.missionPreview) selectors.missionPreview.textContent = lastMissionProjectText;
+}
+
+async function copyMissionProjectJson() {
+  renderMissionProjectPreview();
+  if (navigator?.clipboard) {
+    await navigator.clipboard.writeText(lastMissionProjectText);
+  }
+  document.querySelector('#appWarning').textContent = 'MissionProject copied to clipboard.';
 }
 
 async function handleMissionImport(event) {
@@ -944,6 +1054,9 @@ async function loadWhitefrostDemo() {
     const json = await res.json();
     applyMissionProject(json);
     document.querySelector('#appWarning').textContent = 'Loaded WHITEFROST demo mission.';
+    renderWhitefrostWizard();
+    renderMissionProjectPreview();
+    return json;
   } catch (err) {
     document.querySelector('#appWarning').textContent = err.message;
   }
@@ -1000,7 +1113,25 @@ function loadDemoPlatform() {
   document.querySelector('#appWarning').textContent = 'Loaded Recon Quad Platform demo with Node Architect payload.';
 }
 
+async function startWhitefrostWizard() {
+  await loadWhitefrostDemo();
+  environment = { altitude: 'mountain', temperature: 'freezing' };
+  selectors.altitude.value = environment.altitude;
+  selectors.temperature.value = environment.temperature;
+  constraintPrefs = { minTwr: 1.3, minEndurance: 20, maxAuw: 6 };
+  hydrateConstraintInputs();
+  renderWhitefrostWizard();
+  evaluateAndRender();
+  document.querySelector('#appWarning').textContent =
+    'WHITEFROST wizard loaded. Step through frame, propulsion, battery, and payload effects in cold/mountain air.';
+}
+
 function exportMissionProjectJson() {
+  const payload = buildMissionProjectPayload();
+  downloadJson('mission_project.json', payload);
+}
+
+function downloadMissionProjectPreview() {
   const payload = buildMissionProjectPayload();
   downloadJson('mission_project.json', payload);
 }
@@ -1019,10 +1150,68 @@ function exportGeojsonFromState() {
   downloadJson('mission_project_geojson.json', geo);
 }
 
+async function copyGeojsonFromState() {
+  const payload = buildMissionProjectPayload();
+  const geo = missionProjectToGeoJson(payload);
+  if (navigator?.clipboard) {
+    await navigator.clipboard.writeText(JSON.stringify(geo, null, 2));
+    document.querySelector('#appWarning').textContent = 'GeoJSON copied to clipboard.';
+  }
+}
+
 function exportCotFromState() {
   const payload = buildMissionProjectPayload();
   const cot = missionProjectToCot(payload);
   downloadJson('mission_project_cot.json', cot);
+}
+
+async function copyCotFromState() {
+  const payload = buildMissionProjectPayload();
+  const cot = missionProjectToCot(payload);
+  if (navigator?.clipboard) {
+    await navigator.clipboard.writeText(JSON.stringify(cot, null, 2));
+    document.querySelector('#appWarning').textContent = 'CoT stub copied to clipboard.';
+  }
+}
+
+function renderWhitefrostWizard() {
+  const target = selectors.whitefrostFlow;
+  if (!target) return;
+  const payload = buildMissionProjectPayload();
+  const bundle = payload.mission_project || payload;
+  const env = bundle.environment?.[0] || {};
+  const envLabel = `${resolveAltitude(env.altitudeBand || env.altitude_band || environment.altitude).label} · ${resolveTemperature(
+    env.temperatureBand || env.temperature_band || environment.temperature
+  ).label}`;
+  const platforms = (bundle.platforms || []).slice(0, 3);
+  const platformCards = platforms
+    .map((p) => {
+      const enduranceHit = (p.nominalEnduranceMin || 0) - (p.adjustedEnduranceMin || 0);
+      const thrust = p.adjustedThrustToWeight || p.thrustToWeight || 0;
+      const liftNote = thrust ? `${thrust.toFixed(2)}g/g adjusted T/W` : 'Awaiting stack evaluation';
+      const payloadCount = (p.payloadIds || p.payload_ids || []).length;
+      const batteryWh = p.batteryWh || p.battery_wh || 'n/a';
+      return `
+        <div class="wizard-card">
+          <h4>${p.name || p.id}</h4>
+          <p class="muted">${p.frameType || p.frame_type || 'frame'} · ${batteryWh} Wh battery · ${payloadCount} payloads</p>
+          <p>Adjusted endurance: ${p.adjustedEnduranceMin ?? 'n/a'} min (${enduranceHit > 0 ? `-${enduranceHit.toFixed(1)} min` : 'no penalty'})</p>
+          <p>${liftNote}</p>
+        </div>
+      `;
+    })
+    .join('');
+  const liveDelta = lastResult
+    ? `<p class="muted">Current stack: ${lastResult.enduranceMinutes?.toFixed(1)} min nominal → ${
+        lastResult.adjustedEnduranceMinutes?.toFixed(1)
+      } min in freezing mountain air.</p>`
+    : '';
+  target.innerHTML = `
+    <p class="muted">WHITEFROST demo uses ${envLabel}. Step through the preset frames, propulsion, batteries, and payload mixes to see the cold/high-altitude impact on lift and endurance.</p>
+    <div class="wizard-grid">${platformCards}</div>
+    ${liveDelta}
+    <p class="small-note">Swap payloads or batteries, then re-run the wizard to compare endurance hits and thrust margins.</p>
+  `;
 }
 
 function parseNodeDesigns(json) {
@@ -1117,6 +1306,8 @@ function evaluateAndRender() {
   renderLibrary(domain);
   renderSavedPlatforms();
   renderPlatformOutputs();
+  renderMissionProjectPreview();
+  renderWhitefrostWizard();
   persistAppState();
 }
 
@@ -1149,7 +1340,13 @@ function wireEvents() {
   selectors.exportMission?.addEventListener('click', exportMissionProjectJson);
   selectors.exportGeojson?.addEventListener('click', exportGeojsonFromState);
   selectors.exportCot?.addEventListener('click', exportCotFromState);
+  selectors.copyMissionPreview?.addEventListener('click', copyMissionProjectJson);
+  selectors.downloadMissionPreview?.addEventListener('click', downloadMissionProjectPreview);
+  selectors.copyGeojson?.addEventListener('click', copyGeojsonFromState);
+  selectors.downloadGeojson?.addEventListener('click', exportGeojsonFromState);
+  selectors.downloadCot?.addEventListener('click', exportCotFromState);
   selectors.loadWhitefrost?.addEventListener('click', loadWhitefrostDemo);
+  selectors.startWhitefrostWizard?.addEventListener('click', startWhitefrostWizard);
   selectors.loadDemo?.addEventListener('click', loadDemoPlatform);
 }
 

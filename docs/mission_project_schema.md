@@ -6,7 +6,8 @@ The Ceradon Architect tools exchange mission context using a shared **MissionPro
 
 ```jsonc
 {
-  "version": "1.0",
+  "version": "2.0.0",
+  "schemaVersion": "2.0.0",
   "origin_tool": "uxs",                // node | uxs | mesh | kit | mission | hub
   "mission": {
     "id": "mission-whitefrost",
@@ -18,17 +19,17 @@ The Ceradon Architect tools exchange mission context using a shared **MissionPro
   "environment": [
     {
       "id": "env-1",
-      "altitude_band": "mountain",     // sea_level | high_desert | mountain (matching UI/CLI bands)
-      "temperature_band": "freezing",  // hot | standard | cold | freezing
+      "altitudeBand": "mountain",     // sea_level | high_desert | mountain (matching UI/CLI bands)
+      "temperatureBand": "freezing",  // hot | standard | cold | freezing
       "notes": "Thin air, cold-soaked packs"
     }
   ],
   "constraints": [
     {
       "id": "cst-1",
-      "min_adjusted_endurance_min": 18,
-      "min_thrust_to_weight": 1.3,
-      "max_auw_kg": 6
+      "minAdjustedEnduranceMin": 18,
+      "minThrustToWeight": 1.3,
+      "maxAuwKg": 6
     }
   ],
   "nodes": [
@@ -37,9 +38,9 @@ The Ceradon Architect tools exchange mission context using a shared **MissionPro
       "name": "Ridge relay node",
       "role": ["mesh_relay", "sensor_node"],
       "origin_tool": "node",
-      "power_draw_w": 4.5,
-      "weight_grams": 620,
-      "rf_band_ghz": 2.4,
+      "powerDrawW": 4.5,
+      "weightGrams": 620,
+      "rfBandGhz": 2.4,
       "location": { "lat": 39.6121, "lon": -105.9449, "elevation_m": 3120 }
     }
   ],
@@ -49,24 +50,24 @@ The Ceradon Architect tools exchange mission context using a shared **MissionPro
       "name": "WHITEFROST Recon Quad",
       "origin_tool": "uxs",
       "domain": "air",
-      "frame_type": "quad",
-      "mounted_node_ids": ["node-ridge-relay"],
-      "payload_ids": ["eo_ir_ball"],
-      "rf_bands_ghz": [5.8, 0.9],
-      "power_budget_w": 185,
-      "auw_kg": 4.9,
-      "adjusted_endurance_min": 23.4,
-      "mission_roles": ["recon", "relay"],
-      "environment_ref": "env-1",
+      "frameType": "quad",
+      "mountedNodeIds": ["node-ridge-relay"],
+      "payloadIds": ["eo_ir_ball"],
+      "rfBandsGhz": [5.8, 0.9],
+      "powerBudgetW": 185,
+      "auwKg": 4.9,
+      "adjustedEnduranceMin": 23.4,
+      "missionRoles": ["recon", "relay"],
+      "environmentRef": "env-1",
       "location": { "lat": 39.6107, "lon": -105.9372, "elevation_m": 2980 }
     }
   ],
-  "mesh_links": [
+  "meshLinks": [
     {
       "id": "link-ridge-hop",
       "from": "node-ridge-relay",
       "to": "plt-recon-quad-01",
-      "rf_band_ghz": 2.4,
+      "rfBandGhz": 2.4,
       "notes": "LoS ridge hop"
     }
   ],
@@ -75,9 +76,9 @@ The Ceradon Architect tools exchange mission context using a shared **MissionPro
       "id": "kit-linehaul",
       "name": "Snowmobile resupply kit",
       "origin_tool": "kit",
-      "supported_platform_ids": ["plt-recon-quad-01"],
-      "power_budget_w": 120,
-      "battery_wh": 260,
+      "supportedPlatformIds": ["plt-recon-quad-01"],
+      "powerBudgetW": 120,
+      "batteryWh": 260,
       "notes": "Low-temp cells and rugged connectors"
     }
   ]
