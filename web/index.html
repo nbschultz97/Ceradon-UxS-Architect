@@ -11,7 +11,7 @@
     }
 
     #access-gate {
-      display: none;
+      display: block;
       max-width: 520px;
       margin: 12vh auto;
       padding: 2rem 2.5rem;
@@ -29,6 +29,10 @@
     #access-gate p {
       margin-top: 0;
       color: #4a5568;
+    }
+
+    #access-gate form {
+      margin-top: 0.5rem;
     }
 
     #access-gate label {
@@ -74,10 +78,19 @@
   <div id="access-gate">
     <h1>Ceradon UxS Architect access</h1>
     <p>Enter your access code to open Ceradon UxS Architect inside the Ceradon Architect planning suite.</p>
-    <label for="demo-code">Access code</label>
-    <input id="demo-code" type="password" autocomplete="off" placeholder="Enter access code" />
-    <button id="demo-enter" type="button">Enter</button>
-    <div id="demo-error" class="error-message">Invalid code.</div>
+    <form id="access-form">
+      <label for="demo-code">Access code</label>
+      <input
+        id="demo-code"
+        name="demo-code"
+        type="password"
+        autocomplete="off"
+        placeholder="Enter access code"
+        aria-describedby="demo-error"
+      />
+      <button id="demo-enter" type="submit">Enter</button>
+      <div id="demo-error" class="error-message" aria-live="polite"></div>
+    </form>
   </div>
 
   <section id="demo-request" class="demo-request">
@@ -352,34 +365,48 @@
   <script type="module" src="dist/ui.js"></script>
   <script>
     (() => {
-      const ACCESS_CODE = "UXS-FLIGHT-982";
+      // Access gate keeps demo deployments behind a simple code list.
+      // Update ALLOWED_CODES to change or add demo keys.
+      const ALLOWED_CODES = ["UXS-FLIGHT-982"];
       const STORAGE_KEY = "ceradonDemoAuthorized";
 
       const gate = document.getElementById("access-gate");
       const app = document.getElementById("app-root");
+      const form = document.getElementById("access-form");
       const input = document.getElementById("demo-code");
-      const submit = document.getElementById("demo-enter");
       const error = document.getElementById("demo-error");
       const demoRequest = document.getElementById("demo-request");
 
+      let isUnlocked = false;
+
+      const setError = (message) => {
+        if (!error) return;
+        error.textContent = message;
+        error.style.display = message ? "block" : "none";
+      };
+
+      const render = () => {
+        if (gate) gate.style.display = isUnlocked ? "none" : "block";
+        if (demoRequest) demoRequest.style.display = isUnlocked ? "none" : "block";
+        if (app) app.style.display = isUnlocked ? "block" : "none";
+        if (!isUnlocked && input) input.value = "";
+      };
+
       const unlock = () => {
+        isUnlocked = true;
         localStorage.setItem(STORAGE_KEY, "true");
-        if (gate) gate.style.display = "none";
-        if (demoRequest) demoRequest.style.display = "none";
-        if (app) app.style.display = "block";
+        setError("");
+        render();
       };
 
-      const showError = () => {
-        if (error) error.style.display = "block";
-      };
-
-      const validate = () => {
-        if (!input) return;
-        const value = input.value.trim();
-        if (value === ACCESS_CODE) {
+      const validate = (code) => {
+        const normalized = (code || "").trim();
+        if (ALLOWED_CODES.includes(normalized)) {
           unlock();
         } else {
-          showError();
+          isUnlocked = false;
+          setError("Invalid code.");
+          render();
         }
       };
 
@@ -389,17 +416,14 @@
           return;
         }
 
-        if (gate) gate.style.display = "block";
-        if (demoRequest) demoRequest.style.display = "block";
-        if (app) app.style.display = "none";
+        isUnlocked = false;
+        setError("");
+        render();
 
-        if (submit) submit.addEventListener("click", validate);
-        if (input) {
-          input.addEventListener("keypress", (event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              validate();
-            }
+        if (form) {
+          form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            validate(input?.value);
           });
         }
       };
