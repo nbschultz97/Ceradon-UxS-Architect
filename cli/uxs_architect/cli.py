@@ -20,6 +20,7 @@ from .design import (
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 WHITEFROST_PATH = BASE_DIR / "data" / "whitefrost_mission_project.json"
+MISSIONPROJECT_SCHEMA_VERSION = "2.0.0"
 
 
 class CompactJSONEncoder(json.JSONEncoder):
@@ -83,8 +84,83 @@ def load_mission_project(path: str | Path) -> Dict[str, Any]:
         return json.load(f)
 
 
+def _field(entry: Dict[str, Any], *names: str) -> Any:
+    for name in names:
+        if name in entry:
+            return entry.get(name)
+    return None
+
+
+def upgrade_mission_project(bundle: Dict[str, Any]) -> Dict[str, Any]:
+    upgraded: Dict[str, Any] = {**bundle}
+
+    def map_env(env: Dict[str, Any]) -> Dict[str, Any]:
+        mapped = {**env}
+        mapped["altitudeBand"] = env.get("altitudeBand") or env.get("altitude_band")
+        mapped["temperatureBand"] = env.get("temperatureBand") or env.get("temperature_band")
+        return mapped
+
+    def map_constraint(cst: Dict[str, Any]) -> Dict[str, Any]:
+        mapped = {**cst}
+        mapped["minThrustToWeight"] = _field(cst, "minThrustToWeight", "min_thrust_to_weight")
+        mapped["minAdjustedEnduranceMin"] = _field(cst, "minAdjustedEnduranceMin", "min_adjusted_endurance_min")
+        mapped["maxAuwKg"] = _field(cst, "maxAuwKg", "max_auw_kg")
+        return mapped
+
+    def map_node(node: Dict[str, Any]) -> Dict[str, Any]:
+        mapped = {**node}
+        mapped["weightGrams"] = _field(node, "weightGrams", "weight_grams")
+        mapped["powerDrawW"] = _field(node, "powerDrawW", "power_draw_w", "power_w")
+        mapped["rfBandGhz"] = _field(node, "rfBandGhz", "rf_band_ghz")
+        mapped["role"] = _field(node, "role", "role_tags") or []
+        return mapped
+
+    def map_platform(plt: Dict[str, Any]) -> Dict[str, Any]:
+        mapped = {**plt}
+        mapped["frameType"] = _field(plt, "frameType", "frame_type", "frame")
+        mapped["mountedNodeIds"] = _field(plt, "mountedNodeIds", "mounted_node_ids") or []
+        mapped["payloadIds"] = _field(plt, "payloadIds", "payload_ids") or []
+        mapped["rfBandsGhz"] = _field(plt, "rfBandsGhz", "rf_bands_ghz") or []
+        mapped["powerBudgetW"] = _field(plt, "powerBudgetW", "power_budget_w")
+        mapped["batteryWh"] = _field(plt, "batteryWh", "battery_wh")
+        mapped["auwKg"] = _field(plt, "auwKg", "auw_kg")
+        mapped["nominalEnduranceMin"] = _field(plt, "nominalEnduranceMin", "nominal_endurance_min")
+        mapped["adjustedEnduranceMin"] = _field(plt, "adjustedEnduranceMin", "adjusted_endurance_min")
+        mapped["thrustToWeight"] = _field(plt, "thrustToWeight", "thrust_to_weight")
+        mapped["adjustedThrustToWeight"] = _field(
+            plt, "adjustedThrustToWeight", "adjusted_thrust_to_weight", "thrust_to_weight"
+        )
+        mapped["missionRoles"] = _field(plt, "missionRoles", "mission_roles") or []
+        mapped["intendedRoles"] = _field(plt, "intendedRoles", "intended_roles") or []
+        mapped["environmentRef"] = _field(plt, "environmentRef", "environment_ref")
+        mapped["constraintsRef"] = _field(plt, "constraintsRef", "constraints_ref")
+        return mapped
+
+    def map_link(link: Dict[str, Any]) -> Dict[str, Any]:
+        mapped = {**link}
+        mapped["rfBandGhz"] = _field(link, "rfBandGhz", "rf_band_ghz")
+        return mapped
+
+    upgraded["schemaVersion"] = bundle.get("schemaVersion") or MISSIONPROJECT_SCHEMA_VERSION
+    upgraded["version"] = bundle.get("version") or MISSIONPROJECT_SCHEMA_VERSION
+    upgraded["environment"] = [map_env(e) for e in bundle.get("environment", [])]
+    upgraded["constraints"] = [map_constraint(c) for c in bundle.get("constraints", [])]
+    upgraded["nodes"] = [map_node(n) for n in bundle.get("nodes", [])]
+    upgraded["platforms"] = [map_platform(p) for p in bundle.get("platforms", [])]
+    upgraded["meshLinks"] = [map_link(l) for l in bundle.get("mesh_links", [])] + [
+        map_link(l) for l in bundle.get("meshLinks", [])
+    ]
+    upgraded["kits"] = [
+        {**k, "supportedPlatformIds": _field(k, "supportedPlatformIds", "supported_platform_ids")}
+        for k in bundle.get("kits", [])
+    ]
+
+    return upgraded
+
+
 def mission_project_to_geojson(project: Dict[str, Any]) -> Dict[str, Any]:
-    bundle = project.get("mission_project") or project
+    base_bundle = project.get("mission_project") or project
+    bundle = upgrade_mission_project(base_bundle)
     features: List[Dict[str, Any]] = []
 
     def push_point(item: Dict[str, Any], feature_type: str) -> None:
@@ -94,6 +170,7 @@ def mission_project_to_geojson(project: Dict[str, Any]) -> Dict[str, Any]:
         coords = [loc["lon"], loc["lat"]]
         if "elevation_m" in loc:
             coords.append(loc["elevation_m"])
+        roles = _field(item, "role", "role_tags", "mission_roles", "missionRoles") or []
         features.append(
             {
                 "type": "Feature",
@@ -103,13 +180,13 @@ def mission_project_to_geojson(project: Dict[str, Any]) -> Dict[str, Any]:
                     "name": item.get("name"),
                     "type": feature_type,
                     "origin_tool": item.get("origin_tool", bundle.get("origin_tool", "uxs")),
-                    "role": item.get("role") or item.get("mission_roles") or [],
-                    "rf_band_ghz": item.get("rf_band_ghz"),
-                    "rf_bands_ghz": item.get("rf_bands_ghz"),
-                    "power_draw_w": item.get("power_draw_w"),
-                    "power_budget_w": item.get("power_budget_w"),
-                    "environment_ref": item.get("environment_ref"),
-                    "constraints_ref": item.get("constraints_ref"),
+                    "role": roles,
+                    "rf_band_ghz": _field(item, "rf_band_ghz", "rfBandGhz"),
+                    "rf_bands_ghz": _field(item, "rf_bands_ghz", "rfBandsGhz"),
+                    "power_draw_w": _field(item, "power_draw_w", "powerDrawW"),
+                    "power_budget_w": _field(item, "power_budget_w", "powerBudgetW"),
+                    "environment_ref": _field(item, "environment_ref", "environmentRef"),
+                    "constraints_ref": _field(item, "constraints_ref", "constraintsRef"),
                 },
             }
         )
@@ -129,7 +206,7 @@ def mission_project_to_geojson(project: Dict[str, Any]) -> Dict[str, Any]:
         if loc:
             loc_index[platform.get("id")] = loc
 
-    for link in bundle.get("mesh_links", []):
+    for link in bundle.get("meshLinks", []) + bundle.get("mesh_links", []):
         a = loc_index.get(link.get("from"))
         b = loc_index.get(link.get("to"))
         if not a or not b:
@@ -153,14 +230,15 @@ def mission_project_to_geojson(project: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def mission_project_to_cot(project: Dict[str, Any]) -> Dict[str, Any]:
-    bundle = project.get("mission_project") or project
+    base_bundle = project.get("mission_project") or project
+    bundle = upgrade_mission_project(base_bundle)
     events: List[Dict[str, Any]] = []
 
     def push_event(item: Dict[str, Any], type_code: str) -> None:
         loc = _sanitize_location(item.get("location"))
         if not loc:
             return
-        roles = item.get("mission_roles") or item.get("role") or []
+        roles = _field(item, "missionRoles", "mission_roles", "role") or []
         events.append(
             {
                 "id": item.get("id"),
@@ -170,12 +248,12 @@ def mission_project_to_cot(project: Dict[str, Any]) -> Dict[str, Any]:
                 "point": {"lat": loc["lat"], "lon": loc["lon"], "hae": loc.get("elevation_m")},
                 "detail": {
                     "origin_tool": item.get("origin_tool", bundle.get("origin_tool", "uxs")),
-                    "rf_band_ghz": item.get("rf_band_ghz"),
-                    "rf_bands_ghz": item.get("rf_bands_ghz"),
-                    "power_draw_w": item.get("power_draw_w"),
-                    "power_budget_w": item.get("power_budget_w"),
-                    "constraints_ref": item.get("constraints_ref"),
-                    "environment_ref": item.get("environment_ref"),
+                    "rf_band_ghz": _field(item, "rf_band_ghz", "rfBandGhz"),
+                    "rf_bands_ghz": _field(item, "rf_bands_ghz", "rfBandsGhz"),
+                    "power_draw_w": _field(item, "power_draw_w", "powerDrawW"),
+                    "power_budget_w": _field(item, "power_budget_w", "powerBudgetW"),
+                    "constraints_ref": _field(item, "constraints_ref", "constraintsRef"),
+                    "environment_ref": _field(item, "environment_ref", "environmentRef"),
                 },
             }
         )
@@ -191,11 +269,11 @@ def mission_project_to_cot(project: Dict[str, Any]) -> Dict[str, Any]:
 def _normalize_nodes(bundle: dict) -> list[dict]:
     nodes: list[dict] = []
     for node in bundle.get("nodes", []):
-        weight_grams = node.get("weight_grams")
+        weight_grams = node.get("weight_grams") or node.get("weightGrams")
         if weight_grams is None and node.get("mass_kg") is not None:
             weight_grams = float(node["mass_kg"]) * 1000
-        power_w = node.get("power_draw_w") or node.get("power_w") or 0.0
-        roles = node.get("role") or node.get("role_tags") or []
+        power_w = node.get("power_draw_w") or node.get("powerDrawW") or node.get("power_w") or 0.0
+        roles = node.get("role") or node.get("role_tags") or node.get("roles") or []
         nodes.append(
             {
                 "id": node.get("id") or node.get("node_id") or node.get("uuid") or node.get("name"),
@@ -253,7 +331,7 @@ def _extend_catalog_with_nodes(catalog: dict, nodes: list[dict]) -> dict:
                 "power_w": power_w or 5.0,
                 "mass_kg": mass_kg,
                 "range_km": node.get("range_km", 0),
-                "rf_band_ghz": node.get("rf_band_ghz"),
+                "rf_band_ghz": node.get("rf_band_ghz") or node.get("rfBandGhz"),
                 "role_tags": roles,
                 "notes": notes,
             }
@@ -274,27 +352,28 @@ def build_mission_platform(
         "id": platform_id or f"plt-{selection.frame}",
         "name": platform_name or "UxS platform",
         "origin_tool": "uxs",
-        "frame_type": selection.frame,
-        "auw_kg": result.mass_kg,
-        "nominal_endurance_min": result.estimated_endurance_min,
-        "adjusted_endurance_min": result.adjusted_endurance_min,
-        "thrust_to_weight": result.thrust_to_weight,
-        "adjusted_thrust_to_weight": result.adjusted_thrust_to_weight,
-        "mounted_node_ids": list(selection.mounted_nodes),
-        "payload_ids": list(selection.payloads),
-        "intended_roles": intended_roles or result.role_tags,
+        "frameType": selection.frame,
+        "auwKg": result.mass_kg,
+        "nominalEnduranceMin": result.estimated_endurance_min,
+        "adjustedEnduranceMin": result.adjusted_endurance_min,
+        "thrustToWeight": result.thrust_to_weight,
+        "adjustedThrustToWeight": result.adjusted_thrust_to_weight,
+        "mountedNodeIds": list(selection.mounted_nodes),
+        "payloadIds": list(selection.payloads),
+        "intendedRoles": intended_roles or result.role_tags,
         "environment": {
-            "altitude_band": environment.altitude_band,
-            "temperature_band": environment.temperature_band,
+            "altitudeBand": environment.altitude_band,
+            "temperatureBand": environment.temperature_band,
         },
     }
     environment_entry = {
         "id": "env-local",
-        "altitude_band": environment.altitude_band,
-        "temperature_band": environment.temperature_band,
+        "altitudeBand": environment.altitude_band,
+        "temperatureBand": environment.temperature_band,
     }
     bundle = {
-        "version": "1.0",
+        "version": MISSIONPROJECT_SCHEMA_VERSION,
+        "schemaVersion": MISSIONPROJECT_SCHEMA_VERSION,
         "origin_tool": "uxs",
         "mission": {"id": "mission-local", "name": "Mission export", "origin_tool": "mission"},
         "environment": [environment_entry],
@@ -386,11 +465,11 @@ def handle_mission(_: Dict[str, Any], args: argparse.Namespace) -> None:
     else:
         project = load_mission_project(args.file)
 
-    bundle = project.get("mission_project") or project
+    bundle = upgrade_mission_project(project.get("mission_project") or project)
     mission = bundle.get("mission", {})
     print(
         f"Mission: {mission.get('name', 'Unknown')} | platforms: {len(bundle.get('platforms', []))} | "
-        f"nodes: {len(bundle.get('nodes', []))} | mesh links: {len(bundle.get('mesh_links', []))}"
+        f"nodes: {len(bundle.get('nodes', []))} | mesh links: {len(bundle.get('meshLinks', []))}"
     )
 
     if args.geojson_out:
@@ -402,7 +481,8 @@ def handle_mission(_: Dict[str, Any], args: argparse.Namespace) -> None:
         Path(args.cot_out).write_text(json.dumps(cot, indent=2), encoding="utf-8")
         print(f"CoT stub written to {args.cot_out}")
     if not args.geojson_out and not args.cot_out:
-        print(json.dumps(project, indent=2))
+        project_out = {"mission_project": bundle} if project.get("mission_project") else bundle
+        print(json.dumps(project_out, indent=2))
 
 
 def build_parser() -> argparse.ArgumentParser:

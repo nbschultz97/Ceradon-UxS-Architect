@@ -302,3 +302,38 @@ footer { padding: 12px 18px 24px; color: var(--muted); }
   font-size: 15px;
   font-weight: 700;
 }
+
+.code-block {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: 10px;
+  overflow: auto;
+  max-height: 420px;
+  border: 1px solid #1f2937;
+  font-size: 13px;
+}
+
+.wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wizard-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.wizard-card {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.wizard-card h4 {
+  margin: 0 0 6px 0;
+}
