@@ -30,7 +30,10 @@ export function buildStack(
     mountedNodeIds: selection.nodePayloads || [],
     missionRole,
     emconPosture,
-    environment
+    environment,
+    launchMethod: selection.launchMethod,
+    recoveryMethod: selection.recoveryMethod,
+    expectedThreatLevel: selection.expectedThreatLevel
   };
   return stack;
 }

@@ -30,16 +30,42 @@ export function buildStack(
     mountedNodeIds: selection.nodePayloads || [],
     missionRole,
     emconPosture,
-    environment
+    environment,
+    launchMethod: selection.launchMethod,
+    recoveryMethod: selection.recoveryMethod,
+    expectedThreatLevel: selection.expectedThreatLevel
   };
   return stack;
 }
 
-function propulsionPower(stack) {
-  if (!stack.motorEsc || !stack.battery) return 0;
-  const throttleFactor = stack.domain === 'air' ? 0.38 : 0.22;
+function estimatePropulsionProfile(stack, totalWeight, altitude) {
+  if (!stack.motorEsc || !stack.battery) {
+    return {
+      hoverThrottle: 0,
+      hoverPower: 0,
+      hoverCurrentPerMotor: 0,
+      thrustAvailable: 0
+    };
+  }
+
+  // Simple transparent thrust and power model:
+  // - We assume linear thrust/current scaling against the published maximums.
+  // - Altitude derates thrust (less air density) and increases throttle to hover.
+  const motors = stack.motorEsc.motor_count || 1;
   const voltage = stack.battery.voltage_nominal;
-  return stack.motorEsc.max_current_per_motor_a * stack.motorEsc.motor_count * voltage * throttleFactor;
+  const requiredThrustPerMotor = totalWeight / motors;
+  const thrustAvailablePerMotor = stack.motorEsc.max_thrust_per_motor_g * altitude.thrustEfficiency;
+  const hoverThrottleRaw = thrustAvailablePerMotor > 0 ? requiredThrustPerMotor / thrustAvailablePerMotor : 0;
+  const hoverThrottle = Math.min(Math.max(hoverThrottleRaw, 0), 1);
+  const hoverCurrentPerMotor = stack.motorEsc.max_current_per_motor_a * hoverThrottle;
+  const hoverPower = hoverCurrentPerMotor * motors * voltage * 1.05; // 5% buffer for losses
+
+  return {
+    hoverThrottle,
+    hoverPower,
+    hoverCurrentPerMotor,
+    thrustAvailable: thrustAvailablePerMotor * motors
+  };
 }
 
 function avionicsPower(stack) {
@@ -98,7 +124,8 @@ export function evaluateStack(stack, environment, constraints = {}) {
   const payloadCapacity = stack.frame?.max_auw_grams || 0;
   const payloadMass = sum(stack.payloads, (p) => p.weight_grams || 0) + sum(stack.nodePayloads || [], (p) => p.weight_grams || 0);
 
-  const propulsion = propulsionPower(stack);
+  const propulsionProfile = estimatePropulsionProfile(stack, totalWeight, altitude);
+  const propulsion = propulsionProfile.hoverPower;
   const payloadPower = sum([...stack.payloads, ...(stack.nodePayloads || [])], (p) => p.power_draw_typical_w || 0);
   const powerBudget = propulsion + avionicsPower(stack) + payloadPower;
   const adjustedPower = powerBudget * (1 + altitude.powerPenalty);
@@ -121,6 +148,9 @@ export function evaluateStack(stack, environment, constraints = {}) {
     warnings.push('Adjusted thrust-to-weight under 1.3 in current environment band');
   } else if (stack.domain === 'air' && adjustedThrustToWeight < 1.4) {
     warnings.push('Adjusted thrust margin is thin; consider more thrust or lighter payloads');
+  }
+  if (propulsionProfile.hoverThrottle > 0.75) {
+    warnings.push('Hover throttle above 75% — little margin for gusts or aggressive maneuvers');
   }
   if (stack.motorEsc && stack.frame && !stack.motorEsc.compatible_frame_form_factors.includes(stack.frame.form_factor)) {
     warnings.push('Motor/ESC set not tagged for this frame form factor');
@@ -161,6 +191,7 @@ export function evaluateStack(stack, environment, constraints = {}) {
     payloadCapacity,
     warnings,
     roleTags: Array.from(roleTags),
-    environment: { altitude: altitude.id, temperature: temperature.id }
+    environment: { altitude: altitude.id, temperature: temperature.id },
+    propulsionProfile
   };
 }
