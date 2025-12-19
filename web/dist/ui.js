@@ -15,9 +15,21 @@ import {
   temperatureBands
 } from './utils.js';
 
-const APP_VERSION = 'UxS Architect v0.3.0';
+const APP_VERSION = 'UxS Architect Web v1.3';
 const MISSIONPROJECT_SCHEMA_VERSION = '2.0.0';
+const ORIGIN_TOOL = 'UxSArchitect';
 const CHANGE_LOG = [
+  {
+    version: 'UxS Architect Web v1.3',
+    date: '2024-07-01',
+    changes: [
+      'Hardened access gate messaging without exposing demo codes and persist unlock locally.',
+      'Fixed catalog dropdown loading with fallback sample parts and explicit error banner.',
+      'Added live Platform Preview with required-part highlighting and continuous performance feedback.',
+      'Enforced required components before evaluation/export and added launch/recovery/threat metadata to MissionProject.',
+      'Aligned MissionProject exports with origin tool tagging and schema version badge updates.'
+    ]
+  },
   {
     version: 'UxS Architect v0.3.0',
     date: '2024-06-05',
@@ -50,7 +62,11 @@ const missionRoles = [
 ];
 
 const emconModes = ['covert', 'normal', 'decoy'];
+const launchMethods = ['hand', 'catapult', 'vtol', 'runway', 'rail', 'other'];
+const recoveryMethods = ['net', 'vtol', 'skid', 'parachute', 'runway', 'water', 'hand', 'other'];
+const threatLevels = ['low', 'medium', 'high', 'extreme'];
 const STORAGE_KEY = 'uxsArchitectState';
+const DEFAULT_PLATFORM_META = { launchMethod: 'vtol', recoveryMethod: 'vtol', expectedThreatLevel: 'medium' };
 
 const selectors = {
   frame: document.querySelector('#frame'),
@@ -70,6 +86,9 @@ const selectors = {
   missionRole: document.querySelector('#missionRole'),
   emcon: document.querySelector('#emcon'),
   domain: document.querySelector('#domain'),
+  launchMethod: document.querySelector('#launchMethod'),
+  recoveryMethod: document.querySelector('#recoveryMethod'),
+  expectedThreatLevel: document.querySelector('#expectedThreatLevel'),
   stackName: document.querySelector('#stackName'),
   altitude: document.querySelector('#altitudeBand'),
   temperature: document.querySelector('#temperatureBand'),
@@ -99,15 +118,19 @@ const selectors = {
   nodeFile: document.querySelector('#nodeFile'),
   platformOutputs: document.querySelector('#platformOutputs'),
   exportPlatformsBottom: document.querySelector('#exportPlatformsBottom'),
-  exportPlatformsStandaloneBottom: document.querySelector('#exportPlatformsStandaloneBottom')
+  exportPlatformsStandaloneBottom: document.querySelector('#exportPlatformsStandaloneBottom'),
+  platformPreview: document.querySelector('#platformPreview'),
+  previewStatus: document.querySelector('#platformStatus'),
+  catalogBanner: document.querySelector('#catalogBanner')
 };
 
 let catalog;
 let catalogWithNodes;
+let catalogFallback = false;
 let selection = {};
 let nodeLibrary = [];
 let savedPlatforms = [];
-let missionMeta = { id: 'mission-local', name: 'Ad hoc mission', origin_tool: 'uxs' };
+let missionMeta = { id: 'mission-local', name: 'Ad hoc mission', origin_tool: ORIGIN_TOOL };
 let meshLinks = [];
 let kits = [];
 let environment = { altitude: 'sea_level', temperature: 'standard' };
@@ -117,31 +140,31 @@ let lastResult = null;
 let lastStack = null;
 let lastMissionProjectText = '';
 
-function pickField(entry: any, ...names: string[]) {
+function pickField(entry, ...names) {
   for (const name of names) {
     if (entry && entry[name] !== undefined) return entry[name];
   }
   return undefined;
 }
 
-function upgradeMissionBundle(input: any) {
+function upgradeMissionBundle(input) {
   const bundle = input?.mission_project || input || {};
-  const upgraded: any = { ...bundle };
+  const upgraded = { ...bundle };
 
-  const mapEnv = (env: any) => ({
+  const mapEnv = (env) => ({
     ...env,
     altitudeBand: pickField(env, 'altitudeBand', 'altitude_band'),
     temperatureBand: pickField(env, 'temperatureBand', 'temperature_band')
   });
 
-  const mapConstraint = (c: any) => ({
+  const mapConstraint = (c) => ({
     ...c,
     minThrustToWeight: pickField(c, 'minThrustToWeight', 'min_thrust_to_weight'),
     minAdjustedEnduranceMin: pickField(c, 'minAdjustedEnduranceMin', 'min_adjusted_endurance_min'),
     maxAuwKg: pickField(c, 'maxAuwKg', 'max_auw_kg')
   });
 
-  const mapNode = (n: any) => ({
+  const mapNode = (n) => ({
     ...n,
     weightGrams: pickField(n, 'weightGrams', 'weight_grams'),
     powerDrawW: pickField(n, 'powerDrawW', 'power_draw_w', 'power_w'),
@@ -149,7 +172,7 @@ function upgradeMissionBundle(input: any) {
     role: pickField(n, 'role', 'role_tags') || []
   });
 
-  const mapPlatform = (p: any) => ({
+  const mapPlatform = (p) => ({
     ...p,
     frameType: pickField(p, 'frameType', 'frame_type', 'frame'),
     mountedNodeIds: pickField(p, 'mountedNodeIds', 'mounted_node_ids') || [],
@@ -168,7 +191,7 @@ function upgradeMissionBundle(input: any) {
     constraintsRef: pickField(p, 'constraintsRef', 'constraints_ref')
   });
 
-  const mapLink = (l: any) => ({ ...l, rfBandGhz: pickField(l, 'rfBandGhz', 'rf_band_ghz') });
+  const mapLink = (l) => ({ ...l, rfBandGhz: pickField(l, 'rfBandGhz', 'rf_band_ghz') });
 
   upgraded.schemaVersion = upgraded.schemaVersion || MISSIONPROJECT_SCHEMA_VERSION;
   upgraded.version = upgraded.version || MISSIONPROJECT_SCHEMA_VERSION;
@@ -177,7 +200,7 @@ function upgradeMissionBundle(input: any) {
   upgraded.nodes = (bundle.nodes || []).map(mapNode);
   upgraded.platforms = (bundle.platforms || []).map(mapPlatform);
   upgraded.meshLinks = ([...(bundle.meshLinks || []), ...(bundle.mesh_links || [])] as any[]).map(mapLink);
-  upgraded.kits = (bundle.kits || []).map((k: any) => ({
+  upgraded.kits = (bundle.kits || []).map((k) => ({
     ...k,
     supportedPlatformIds: pickField(k, 'supportedPlatformIds', 'supported_platform_ids')
   }));
@@ -334,20 +357,67 @@ function renderChangeLog() {
   });
 }
 
+function setAppWarning(message) {
+  const warning = document.querySelector('#appWarning');
+  if (!warning) return;
+  warning.textContent = message || '';
+}
+
+const REQUIRED_PARTS = [
+  { key: 'frame', label: 'Frame' },
+  { key: 'motorEsc', label: 'Propulsion' },
+  { key: 'battery', label: 'Battery' },
+  { key: 'compute', label: 'Compute' },
+  { key: 'rcReceiver', label: 'Radio link' }
+];
+
+function missingRequiredParts(stack) {
+  if (!stack) return REQUIRED_PARTS.map((p) => p.label);
+  return REQUIRED_PARTS.filter((p) => !stack[p.key]).map((p) => p.label);
+}
+
+function canExportCurrent() {
+  if (savedPlatforms.length) return true;
+  const workingCatalog = getCatalog();
+  const stack =
+    lastStack ||
+    buildStack(workingCatalog, selection, selectors.missionRole.value, selectors.emcon.value, selectors.domain.value, nodeLibrary, environment);
+  const missing = missingRequiredParts(stack);
+  if (missing.length || !lastResult) {
+    setAppWarning('Add required components and evaluate before exporting.');
+    renderPlatformPreview(stack, lastResult, missing);
+    return false;
+  }
+  return true;
+}
+
 function ensureSelection() {
   const domain = selection.domain || selectors.domain.value;
   selectors.domain.value = domain;
   if (!selection.frame) selection = { ...selection, ...defaultSelections(getCatalog(), domain) };
-  selection = { ...selection, nodePayloads: selection.nodePayloads || [], domain };
+  selection = {
+    ...selection,
+    nodePayloads: selection.nodePayloads || [],
+    domain,
+    launchMethod: selection.launchMethod || DEFAULT_PLATFORM_META.launchMethod,
+    recoveryMethod: selection.recoveryMethod || DEFAULT_PLATFORM_META.recoveryMethod,
+    expectedThreatLevel: selection.expectedThreatLevel || DEFAULT_PLATFORM_META.expectedThreatLevel
+  };
 }
 
 function populateStaticControls() {
   setOptions(selectors.missionRole, missionRoles.map((r) => ({ id: r, name: r })), (i) => i.name);
   setOptions(selectors.emcon, emconModes.map((r) => ({ id: r, name: r })), (i) => i.name);
+  setOptions(selectors.launchMethod, launchMethods.map((r) => ({ id: r, name: r })), (i) => i.name);
+  setOptions(selectors.recoveryMethod, recoveryMethods.map((r) => ({ id: r, name: r })), (i) => i.name);
+  setOptions(selectors.expectedThreatLevel, threatLevels.map((r) => ({ id: r, name: r })), (i) => i.name);
   setOptions(selectors.altitude, altitudeBands, (i) => i.name);
   setOptions(selectors.temperature, temperatureBands, (i) => i.name);
   selectors.altitude.value = environment.altitude;
   selectors.temperature.value = environment.temperature;
+  selectors.launchMethod.value = selection.launchMethod || DEFAULT_PLATFORM_META.launchMethod;
+  selectors.recoveryMethod.value = selection.recoveryMethod || DEFAULT_PLATFORM_META.recoveryMethod;
+  selectors.expectedThreatLevel.value = selection.expectedThreatLevel || DEFAULT_PLATFORM_META.expectedThreatLevel;
   hydrateConstraintInputs();
 }
 
@@ -485,7 +555,10 @@ function readSelectionFromDom() {
     compute: selectors.compute.value,
     payloads: parseMultiSelect(selectors.payloads),
     nodePayloads: parseMultiSelect(selectors.nodePayloads),
-    domain: selectors.domain.value
+    domain: selectors.domain.value,
+    launchMethod: selectors.launchMethod.value,
+    recoveryMethod: selectors.recoveryMethod.value,
+    expectedThreatLevel: selectors.expectedThreatLevel.value
   };
   environment = { altitude: selectors.altitude.value, temperature: selectors.temperature.value };
   readConstraintsFromDom();
@@ -493,7 +566,16 @@ function readSelectionFromDom() {
 
 function renderMetrics(stack, result) {
   const metrics = document.querySelector('#metrics');
+  if (!metrics) return;
   metrics.innerHTML = '';
+  const roles = document.querySelector('#roles');
+  const warnings = document.querySelector('#warnings');
+  if (!result) {
+    metrics.innerHTML = '<div class="muted">Select required components to see performance.</div>';
+    if (roles) roles.innerHTML = '';
+    if (warnings) warnings.innerHTML = '';
+    return;
+  }
   const altitude = resolveAltitude(result.environment.altitude);
   const temperature = resolveTemperature(result.environment.temperature);
   const auwLimit = constraintPrefs.maxAuw;
@@ -537,7 +619,6 @@ function renderMetrics(stack, result) {
     metrics.appendChild(div);
   });
 
-  const roles = document.querySelector('#roles');
   roles.innerHTML = '';
   result.roleTags.forEach((tag) => {
     const pill = document.createElement('span');
@@ -546,7 +627,6 @@ function renderMetrics(stack, result) {
     roles.appendChild(pill);
   });
 
-  const warnings = document.querySelector('#warnings');
   warnings.innerHTML = '';
   result.warnings.forEach((w) => {
     const li = document.createElement('li');
@@ -587,6 +667,117 @@ function renderStackCards(stack) {
   });
 }
 
+const domainIcons = { air: '✈️', ground: '🚜', maritime: '🛥️' };
+
+function metricClass(value, thresholds) {
+  if (value === null || value === undefined) return 'neutral';
+  if (value >= thresholds.good) return 'ok';
+  if (value >= thresholds.min) return 'warn';
+  return 'bad';
+}
+
+function renderPlatformPreview(stack, result, missingRequired = []) {
+  const container = selectors.platformPreview;
+  if (!container) return;
+  container.innerHTML = '';
+  const status = selectors.previewStatus;
+
+  if (!stack) {
+    if (status) status.textContent = '';
+    return;
+  }
+
+  const missingSet = new Set(missingRequired);
+  const hero = document.createElement('div');
+  hero.className = 'preview-hero';
+  const icon = domainIcons[stack.domain] || '🛰️';
+  hero.innerHTML = `<div class="preview-icon">${icon}</div>
+    <div class="preview-heading">
+      <div class="preview-title">${stack.name || 'Platform preview'}</div>
+      <div class="muted">${stack.domain || 'domain'} · ${stack.missionRole || 'mission role TBD'}</div>
+      <div class="muted">Launch: ${stack.launchMethod || '—'} · Recovery: ${stack.recoveryMethod || '—'} · Threat: ${
+    stack.expectedThreatLevel || '—'
+  }</div>
+    </div>`;
+  container.appendChild(hero);
+
+  const parts = [
+    { label: 'Frame', value: stack.frame?.name, requiredLabel: 'Frame' },
+    { label: 'Propulsion', value: stack.motorEsc?.name, requiredLabel: 'Propulsion' },
+    { label: 'Battery', value: stack.battery?.name, requiredLabel: 'Battery' },
+    { label: 'Compute', value: stack.compute?.name, requiredLabel: 'Compute' },
+    { label: 'Radio', value: stack.rcReceiver?.name, requiredLabel: 'Radio link' },
+    { label: 'Flight control', value: stack.flightController?.name },
+    { label: 'Aux radio', value: stack.auxRadio?.name },
+    { label: 'VTX', value: stack.vtx?.name },
+    { label: 'Payloads', value: stack.payloads?.map((p) => p.name).join(', ') || 'Optional' }
+  ];
+
+  const partsGrid = document.createElement('div');
+  partsGrid.className = 'preview-parts';
+  parts.forEach((p) => {
+    const card = document.createElement('div');
+    const missing = p.requiredLabel && missingSet.has(p.requiredLabel);
+    card.className = `preview-part${missing ? ' missing' : ''}`;
+    card.innerHTML = `<div class="label">${p.label}</div><div class="value">${p.value || '—'}</div>`;
+    partsGrid.appendChild(card);
+  });
+  container.appendChild(partsGrid);
+
+  const metricsWrap = document.createElement('div');
+  metricsWrap.className = 'preview-metrics';
+  if (result) {
+    const twrClass = metricClass(result.adjustedThrustToWeight, { good: 1.6, min: 1.3 });
+    const enduranceClass = metricClass(result.adjustedEnduranceMinutes, { good: 25, min: 15 });
+    const auwClass = constraintPrefs.maxAuw
+      ? metricClass(constraintPrefs.maxAuw * 1000 - result.totalWeight, { good: 0, min: -200 })
+      : 'neutral';
+    const metrics = [
+      {
+        label: 'AUW',
+        value: formatWeight(result.totalWeight),
+        note: result.payloadCapacity ? `${formatWeight(result.payloadCapacity - result.payloadMass)} spare` : '',
+        cls: auwClass
+      },
+      {
+        label: 'Thrust-to-weight',
+        value: result.adjustedThrustToWeight.toFixed(2),
+        note: 'env-adjusted',
+        cls: twrClass
+      },
+      {
+        label: 'Endurance',
+        value: `${result.adjustedEnduranceMinutes.toFixed(1)} min`,
+        note: 'env-adjusted',
+        cls: enduranceClass
+      }
+    ];
+    metrics.forEach((m) => {
+      const pill = document.createElement('div');
+      pill.className = `preview-metric ${m.cls}`;
+      pill.innerHTML = `<div class="label">${m.label}</div><div class="value">${m.value}</div><div class="muted">${
+        m.note || ''
+      }</div>`;
+      metricsWrap.appendChild(pill);
+    });
+  } else {
+    metricsWrap.innerHTML = '<div class="muted">Add required parts to see live performance.</div>';
+  }
+  container.appendChild(metricsWrap);
+
+  if (status) {
+    if (missingRequired.length) {
+      status.textContent = `Missing: ${missingRequired.join(', ')}`;
+      status.classList.add('warn');
+      status.classList.remove('ok');
+    } else {
+      status.textContent = 'Ready for evaluation';
+      status.classList.add('ok');
+      status.classList.remove('warn');
+    }
+  }
+}
+
 function renderLibrary(domain) {
   const libraryList = document.querySelector('#library');
   libraryList.innerHTML = '';
@@ -612,6 +803,9 @@ function loadSnapshot(entry) {
   constraintPrefs = { ...constraintPrefs, ...(entry.constraints || {}) };
   selectors.stackName.value = selection.name || selectors.stackName.value;
   selectors.domain.value = selection.domain || selectors.domain.value;
+  selectors.launchMethod.value = selection.launchMethod || DEFAULT_PLATFORM_META.launchMethod;
+  selectors.recoveryMethod.value = selection.recoveryMethod || DEFAULT_PLATFORM_META.recoveryMethod;
+  selectors.expectedThreatLevel.value = selection.expectedThreatLevel || DEFAULT_PLATFORM_META.expectedThreatLevel;
   selectors.altitude.value = environment.altitude;
   selectors.temperature.value = environment.temperature;
   hydrateConstraintInputs();
@@ -634,7 +828,7 @@ function renderSavedPlatforms() {
     const li = document.createElement('li');
     li.innerHTML = `<div class="item-title">${entry.name || 'Platform'} (${entry.frameType || 'frame'})</div>
       <div class="item-meta">${formatWeight(entry.metrics.totalWeight)} · TW ${entry.metrics.thrustToWeight.toFixed(2)} (adj ${entry.metrics.adjustedThrustToWeight.toFixed(2)}) · ${entry.metrics.adjustedEnduranceMinutes.toFixed(1)} min adj</div>
-      <div class="item-notes">${resolveAltitude(entry.environment.altitude).name} · ${resolveTemperature(entry.environment.temperature).name} · ${entry.origin_tool || 'uxs'}</div>`;
+      <div class="item-notes">${resolveAltitude(entry.environment.altitude).name} · ${resolveTemperature(entry.environment.temperature).name} · ${entry.origin_tool || ORIGIN_TOOL}</div>`;
     const loadBtn = document.createElement('button');
     loadBtn.className = 'ghost';
     loadBtn.textContent = 'Load';
@@ -701,14 +895,18 @@ function missionPlatformToSnapshot(p) {
     id: p.id || p.platform_id || `platform-${Date.now()}`,
     name: p.name || 'Imported platform',
     frameType: p.frame_type || p.frame || defaults.frame || 'frame',
-    origin_tool: p.origin_tool || 'uxs',
+    origin_tool: p.origin_tool || ORIGIN_TOOL,
     selection: {
       ...defaults,
       ...(p.selection || {}),
       payloads: p.payload_ids || p.payloads || p.payloadIds || defaults.payloads || [],
       nodePayloads: p.mounted_node_ids || p.mountedNodeIds || [],
       domain,
-      frame: pickField(p, 'frame', 'frame_type', 'frameType') || defaults.frame
+      frame: pickField(p, 'frame', 'frame_type', 'frameType') || defaults.frame,
+      launchMethod: pickField(p, 'launch_method', 'launchMethod') || DEFAULT_PLATFORM_META.launchMethod,
+      recoveryMethod: pickField(p, 'recovery_method', 'recoveryMethod') || DEFAULT_PLATFORM_META.recoveryMethod,
+      expectedThreatLevel:
+        pickField(p, 'expected_threat_level', 'expectedThreatLevel') || DEFAULT_PLATFORM_META.expectedThreatLevel
     },
     environment: {
       altitude:
@@ -818,7 +1016,7 @@ function snapshotToPlatform(entry, envId, constraintId, workingCatalog) {
   return {
     id: entry.id,
     name: entry.name,
-    origin_tool: entry.origin_tool || 'uxs',
+    origin_tool: entry.origin_tool || ORIGIN_TOOL,
     domain: entry.selection?.domain || 'air',
     frameType: entry.frameType || entry.selection?.frame || 'frame',
     payloadIds: entry.selection?.payloads || [],
@@ -835,6 +1033,9 @@ function snapshotToPlatform(entry, envId, constraintId, workingCatalog) {
     adjustedThrustToWeight: entry.metrics?.adjustedThrustToWeight || undefined,
     hoverThrottle: entry.metrics?.hoverThrottle,
     hoverPowerW: entry.metrics?.hoverPower,
+    launchMethod: entry.selection?.launchMethod || entry.launchMethod,
+    recoveryMethod: entry.selection?.recoveryMethod || entry.recoveryMethod,
+    expectedThreatLevel: entry.selection?.expectedThreatLevel || entry.expectedThreatLevel,
     missionRoles: entry.roleTags || [],
     intendedRoles: entry.roleTags || [],
     environmentRef: envId,
@@ -912,8 +1113,8 @@ function buildMissionProjectPayload() {
     ...innerBase,
     schemaVersion: innerBase.schemaVersion || MISSIONPROJECT_SCHEMA_VERSION,
     version: innerBase.version || MISSIONPROJECT_SCHEMA_VERSION,
-    origin_tool: innerBase.origin_tool || 'uxs',
-    mission: { ...innerBase.mission, ...missionMeta, origin_tool: missionMeta.origin_tool || innerBase.origin_tool || 'uxs' },
+    origin_tool: innerBase.origin_tool || ORIGIN_TOOL,
+    mission: { ...innerBase.mission, ...missionMeta, origin_tool: missionMeta.origin_tool || innerBase.origin_tool || ORIGIN_TOOL },
     environment: environmentEntries,
     constraints: constraintEntries,
     nodes: Array.from(nodeEntries.values()),
@@ -942,14 +1143,17 @@ function missionProjectToGeoJson(project) {
         id: item.id,
         name: item.name,
         type,
-        origin_tool: item.origin_tool || bundle.origin_tool || 'uxs',
+        origin_tool: item.origin_tool || bundle.origin_tool || ORIGIN_TOOL,
         role: item.role || item.mission_roles || item.missionRoles || [],
         rf_band_ghz: pickField(item, 'rf_band_ghz', 'rfBandGhz'),
         rf_bands_ghz: pickField(item, 'rf_bands_ghz', 'rfBandsGhz'),
         power_draw_w: pickField(item, 'power_draw_w', 'powerDrawW'),
         power_budget_w: pickField(item, 'power_budget_w', 'powerBudgetW'),
         environment_ref: pickField(item, 'environment_ref', 'environmentRef'),
-        constraints_ref: pickField(item, 'constraints_ref', 'constraintsRef')
+        constraints_ref: pickField(item, 'constraints_ref', 'constraintsRef'),
+        launch_method: pickField(item, 'launch_method', 'launchMethod'),
+        recovery_method: pickField(item, 'recovery_method', 'recoveryMethod'),
+        expected_threat_level: pickField(item, 'expected_threat_level', 'expectedThreatLevel')
       }
     });
   };
@@ -1003,13 +1207,16 @@ function missionProjectToCot(project) {
       remarks: `${item.name} (${roles.join(', ') || 'unspecified'})`,
       point: { lat: loc.lat, lon: loc.lon, hae: loc.elevation_m },
       detail: {
-        origin_tool: item.origin_tool || bundle.origin_tool || 'uxs',
+        origin_tool: item.origin_tool || bundle.origin_tool || ORIGIN_TOOL,
         rf_band_ghz: pickField(item, 'rf_band_ghz', 'rfBandGhz'),
         rf_bands_ghz: pickField(item, 'rf_bands_ghz', 'rfBandsGhz'),
         power_draw_w: pickField(item, 'power_draw_w', 'powerDrawW'),
         power_budget_w: pickField(item, 'power_budget_w', 'powerBudgetW'),
         constraints_ref: pickField(item, 'constraints_ref', 'constraintsRef'),
-        environment_ref: pickField(item, 'environment_ref', 'environmentRef')
+        environment_ref: pickField(item, 'environment_ref', 'environmentRef'),
+        launch_method: pickField(item, 'launch_method', 'launchMethod'),
+        recovery_method: pickField(item, 'recovery_method', 'recoveryMethod'),
+        expected_threat_level: pickField(item, 'expected_threat_level', 'expectedThreatLevel')
       }
     });
   };
@@ -1127,16 +1334,19 @@ async function startWhitefrostWizard() {
 }
 
 function exportMissionProjectJson() {
+  if (!canExportCurrent()) return;
   const payload = buildMissionProjectPayload();
   downloadJson('mission_project.json', payload);
 }
 
 function downloadMissionProjectPreview() {
+  if (!canExportCurrent()) return;
   const payload = buildMissionProjectPayload();
   downloadJson('mission_project.json', payload);
 }
 
 function exportPlatformsOnly() {
+  if (!canExportCurrent()) return;
   const envId = missionMeta.environment_id || 'env-local';
   const constraintId = missionMeta.constraint_id || 'cst-local';
   const workingCatalog = getCatalog();
@@ -1145,12 +1355,14 @@ function exportPlatformsOnly() {
 }
 
 function exportGeojsonFromState() {
+  if (!canExportCurrent()) return;
   const payload = buildMissionProjectPayload();
   const geo = missionProjectToGeoJson(payload);
   downloadJson('mission_project_geojson.json', geo);
 }
 
 async function copyGeojsonFromState() {
+  if (!canExportCurrent()) return;
   const payload = buildMissionProjectPayload();
   const geo = missionProjectToGeoJson(payload);
   if (navigator?.clipboard) {
@@ -1160,12 +1372,14 @@ async function copyGeojsonFromState() {
 }
 
 function exportCotFromState() {
+  if (!canExportCurrent()) return;
   const payload = buildMissionProjectPayload();
   const cot = missionProjectToCot(payload);
   downloadJson('mission_project_cot.json', cot);
 }
 
 async function copyCotFromState() {
+  if (!canExportCurrent()) return;
   const payload = buildMissionProjectPayload();
   const cot = missionProjectToCot(payload);
   if (navigator?.clipboard) {
@@ -1259,12 +1473,16 @@ function savePlatformSnapshot() {
   if (!lastResult || !lastStack) {
     evaluateAndRender();
   }
+  if (!lastResult) {
+    setAppWarning('Complete required components before saving a platform.');
+    return;
+  }
   const id = crypto.randomUUID ? crypto.randomUUID() : `platform-${Date.now()}`;
   const entry = {
     id,
     name: selection.name || 'Platform',
     frameType: lastStack.frame?.form_factor || lastStack.frame?.subtype || lastStack.frame?.id,
-    origin_tool: 'uxs',
+    origin_tool: ORIGIN_TOOL,
     selection: { ...selection },
     environment: { ...environment },
     constraints: { ...constraintPrefs },
@@ -1298,9 +1516,27 @@ function evaluateAndRender() {
   const domain = selectors.domain.value;
   const workingCatalog = getCatalog();
   const stack = buildStack(workingCatalog, selection, selectors.missionRole.value, selectors.emcon.value, domain, nodeLibrary, environment);
+  lastStack = stack;
+  const missing = missingRequiredParts(stack);
+  if (missing.length) {
+    lastResult = null;
+    setAppWarning(`Missing required components: ${missing.join(', ')}`);
+    renderPlatformPreview(stack, null, missing);
+    renderMetrics(stack, null);
+    renderStackCards(stack);
+    renderLibrary(domain);
+    renderSavedPlatforms();
+    renderPlatformOutputs();
+    renderMissionProjectPreview();
+    renderWhitefrostWizard();
+    persistAppState();
+    return;
+  }
+
   const result = evaluateStack(stack, environment, constraintPrefs);
   lastResult = result;
-  lastStack = stack;
+  renderPlatformPreview(stack, result, missing);
+  setAppWarning('');
   renderMetrics(stack, result);
   renderStackCards(stack);
   renderLibrary(domain);
@@ -1352,7 +1588,9 @@ function wireEvents() {
 
 async function main() {
   loadPersistedState();
-  catalog = await loadCatalog();
+  const catalogResult = await loadCatalog();
+  catalog = catalogResult.catalog;
+  catalogFallback = catalogResult.fallbackUsed;
   refreshCatalogWithNodes();
   populateStaticControls();
   ensureSelection();
@@ -1364,6 +1602,10 @@ async function main() {
   renderNodeLibrary();
   renderSavedPlatforms();
   wireEvents();
+  if (catalogFallback && selectors.catalogBanner) {
+    selectors.catalogBanner.textContent = 'Catalog failed to load; using minimal fallback sample parts.';
+    selectors.catalogBanner.style.display = 'block';
+  }
   evaluateAndRender();
 }
 
